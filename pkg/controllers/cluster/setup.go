@@ -23,12 +23,16 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
 	"github.com/crossplane/agent/pkg/controllers/cluster/crd"
+	"github.com/crossplane/agent/pkg/controllers/cluster/syncer"
 )
 
-// Setup workload controllers.
+// SetupInfraPubSync workload controllers.
 func Setup(mgr ctrl.Manager, localClient client.Client, l logging.Logger) error {
 	for _, setup := range []func(ctrl.Manager, client.Client, logging.Logger) error{
 		crd.Setup,
+		syncer.SetupInfraPubSync,
+		syncer.SetupInfraDefSync,
+		syncer.SetupCompositionSync,
 	} {
 		if err := setup(mgr, localClient, l); err != nil {
 			return err
