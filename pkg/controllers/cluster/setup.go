@@ -30,6 +30,8 @@ import (
 func Setup(mgr ctrl.Manager, localClient client.Client, l logging.Logger) error {
 	for _, setup := range []func(ctrl.Manager, client.Client, logging.Logger) error{
 		crd.Setup,
+		// todo: this should watch local cluster
+		crd.SetupRequirementCRD,
 		syncer.SetupInfraPubSync,
 		syncer.SetupInfraDefSync,
 		syncer.SetupCompositionSync,
