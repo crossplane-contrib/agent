@@ -19,7 +19,7 @@ package remote
 import (
 	"time"
 
-	"github.com/crossplane/crossplane/apis/apiextensions"
+	capiextensions "github.com/crossplane/crossplane/apis/apiextensions"
 	"github.com/pkg/errors"
 	crds "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/rest"
@@ -29,8 +29,8 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
-	"github.com/crossplane/agent/pkg/controllers/cluster/crd"
-	"github.com/crossplane/agent/pkg/controllers/cluster/syncer"
+	"github.com/crossplane/agent/pkg/controllers/apiextensions"
+	"github.com/crossplane/agent/pkg/controllers/crd"
 )
 
 type Setup func(mgr manager.Manager, localClient client.Client, logger logging.Logger) error
@@ -60,15 +60,15 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 		return errors.Wrap(err, "Cannot add CustomResourceDefinition API to scheme")
 	}
 
-	if err := apiextensions.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := capiextensions.AddToScheme(mgr.GetScheme()); err != nil {
 		return errors.Wrap(err, "Cannot add Crossplane apiextensions API to scheme")
 	}
 
 	for _, setup := range []Setup{
 		crd.Setup,
-		syncer.SetupInfraPubSync,
-		syncer.SetupInfraDefSync,
-		syncer.SetupCompositionSync,
+		apiextensions.SetupInfraPubSync,
+		apiextensions.SetupInfraDefSync,
+		apiextensions.SetupCompositionSync,
 	} {
 		if err := setup(mgr, localClient, log); err != nil {
 			return err

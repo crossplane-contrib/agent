@@ -39,6 +39,7 @@ import (
 const (
 	timeout        = 2 * time.Minute
 	shortWait      = 30 * time.Second
+	longWait       = 1 * time.Minute
 	maxConcurrency = 5
 )
 
@@ -62,7 +63,7 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 		Named(name).
 		For(&v1beta1.CustomResourceDefinition{}).
 		WithOptions(kcontroller.Options{MaxConcurrentReconciles: maxConcurrency}).
-		WithEventFilter(NewNameFilter([]types.NamespacedName{
+		WithEventFilter(resource.NewNameFilter([]types.NamespacedName{
 			{Name: "infrastructuredefinitions.apiextensions.crossplane.io"},
 			{Name: "infrastructurepublications.apiextensions.crossplane.io"},
 			{Name: "compositions.apiextensions.crossplane.io"},
@@ -90,12 +91,12 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	crd := &v1beta1.CustomResourceDefinition{}
 	if err := r.remote.Get(ctx, req.NamespacedName, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in remote cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in the remote cluster")
 	}
 	existing := &v1beta1.CustomResourceDefinition{}
 	if err := r.local.Get(ctx, req.NamespacedName, crd); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in the local cluster")
 	}
 	resource.EqualizeMetadata(existing, crd)
-	return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply in local cluster")
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply in the local cluster")
 }

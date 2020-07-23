@@ -28,7 +28,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
-	"github.com/crossplane/agent/pkg/controllers/cluster/crd"
+	"github.com/crossplane/agent/pkg/controllers/crd"
 )
 
 type Agent struct {
@@ -67,6 +67,9 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 	if err := crd.SetupRequirementCRD(mgr, clusterRemoteClient, log); err != nil {
 		return errors.Wrap(err, "cannot setup requirement crd reconciler")
 	}
+
+	// TODO(muvaf): A controller engine should be started here and it should spawn
+	// a syncer for each new requirement type.
 
 	return errors.Wrap(mgr.Start(ctrl.SetupSignalHandler()), "cannot start controller manager")
 }

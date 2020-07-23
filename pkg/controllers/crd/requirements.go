@@ -20,29 +20,24 @@ import (
 	"context"
 	"fmt"
 
-	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
-
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"github.com/crossplane/crossplane-runtime/pkg/meta"
-
-	"github.com/crossplane/agent/pkg/resource"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
+	"github.com/pkg/errors"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
-	"github.com/pkg/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
+
+	"github.com/crossplane/agent/pkg/resource"
 )
 
 func SetupRequirementCRD(mgr manager.Manager, remoteClient client.Client, logger logging.Logger) error {
@@ -82,19 +77,19 @@ func (r *RequirementCRDReconciler) Reconcile(req reconcile.Request) (reconcile.R
 
 	p := &v1alpha1.InfrastructurePublication{}
 	if err := r.local.Get(ctx, req.NamespacedName, p); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get infrastructurepublication")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get infrastructurepublication in the local cluster")
 	}
 	gk := schema.ParseGroupKind(p.Spec.InfrastructureDefinitionReference.Name)
 	crd := &v1beta1.CustomResourceDefinition{}
 	nn := types.NamespacedName{Name: fmt.Sprintf("%s%s.%s", gk.Kind[:len(gk.Kind)-1], ccrd.PublishedInfrastructureSuffixPlural, gk.Group)}
 	if err := r.remote.Get(ctx, nn, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get CRD in local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get CRD in the local cluster")
 	}
 	existing := &v1beta1.CustomResourceDefinition{}
 	if err := r.local.Get(ctx, nn, existing); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get CRD in local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get CRD in the local cluster")
 	}
 	resource.EqualizeMetadata(existing, crd)
 	meta.AddOwnerReference(crd, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
-	return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply CRD in local cluster")
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply CRD in the local cluster")
 }
