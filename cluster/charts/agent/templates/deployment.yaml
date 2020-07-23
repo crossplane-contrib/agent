@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crossplane-agent
+spec:
+  selector:
+    matchLabels:
+      app: crossplane-agent
+  replicas: 1
+  template:
+    spec:
+      serviceAccountName: crossplane-agent
+      imagePullSecrets: {{ .Values.imagePullSecrets }}
+      containers:
+        - name: local
+          image: {{ .Values.image | default "crossplane/agent:latest" }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - agent
+          args:
+            - "--mode"
+            - "local"
+            - "--cluster-kubeconfig"
+            - "/kubeconfigs/cluster/kubeconfig"
+            - "--default-kubeconfig"
+            - "/kubeconfigs/default/kubeconfig"
+        - name: remote
+          image: {{ .Values.image | default "crossplane/agent:latest" }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - agent
+          args:
+            - "--mode"
+            - "remote"
+            - "--cluster-kubeconfig"
+            - "/kubeconfigs/cluster/kubeconfig"
+            - "--default-kubeconfig"
+            - "/kubeconfigs/default/kubeconfig"
+          volumeMounts:
+            - mountPath: "/kubeconfigs/default"
+              name: default-kubeconfig
+            - mountPath: "/kubeconfigs/cluster"
+              name: cluster-kubeconfig
+      volumes:
+        - name: cluster-kubeconfig
+          secret:
+            secretName: {{ .Values.clusterCredentials.secretName }}
+        - name: default-kubeconfig
+          secret:
+            secretName: {{ .Values.defaultCredentials.secretName }}

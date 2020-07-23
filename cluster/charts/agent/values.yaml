@@ -1,0 +1,9 @@
+image:
+  repository: "crossplane/agent:latest"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+defaultCredentials:
+  secretName: default-sa
+clusterCredentials:
+  secretName: cluster-sa
