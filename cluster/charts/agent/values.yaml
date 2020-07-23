@@ -6,4 +6,4 @@ imagePullSecrets: []
 defaultCredentials:
   secretName: default-sa
 clusterCredentials:
-  secretName: cluster-sa
+  secretName: ""

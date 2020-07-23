@@ -31,4 +31,5 @@ func EqualizeMetadata(current, desired runtime.Object) {
 	d.SetSelfLink(c.GetSelfLink())
 	d.SetOwnerReferences(nil)
 	d.SetManagedFields(nil)
+	d.SetFinalizers(c.GetFinalizers())
 }

@@ -21,9 +21,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/crossplane/agent/cmd/local"
-	"github.com/crossplane/agent/cmd/remote"
-
 	"gopkg.in/alecthomas/kingpin.v2"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -31,6 +28,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+
+	"github.com/crossplane/agent/cmd/local"
+	"github.com/crossplane/agent/cmd/remote"
 )
 
 func main() {

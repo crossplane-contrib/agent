@@ -51,7 +51,7 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 		return errors.Wrap(err, "cannot create cluster remote client")
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{SyncPeriod: &period})
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{SyncPeriod: &period, MetricsBindAddress: "0"})
 	if err != nil {
 		return errors.Wrap(err, "cannot start remote cluster manager")
 	}

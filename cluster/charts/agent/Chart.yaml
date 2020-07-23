@@ -1,7 +1,6 @@
 apiVersion: v2
 name: agent
-description: A Helm chart for Crossplane Agent that will sync Crossplane resources
-between this cluster and a remote Crossplane cluster.
+description: A Helm chart for Crossplane Agent that will sync Crossplane resources between this cluster and a remote Crossplane cluster.
 type: application
 
 # This is the chart version. This version number should be incremented each time you make changes
