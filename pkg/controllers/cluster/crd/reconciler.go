@@ -52,7 +52,10 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 		},
 		remote: mgr.GetClient(),
 		log:    logger,
-		// TODO(muvaf): do events.
+		// TODO(muvaf): The event recorders are constructed using manager but since
+		// the manager is configured with the remote cluster, we are passing NopRecorder
+		// for now until we figure out how we can construct an event recorder with
+		// just kubeconfig.
 		record: event.NewNopRecorder(),
 	}
 	return ctrl.NewControllerManagedBy(mgr).

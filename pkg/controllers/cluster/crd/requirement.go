@@ -45,17 +45,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func SetupRequirementCRD(mgr manager.Manager, localClient client.Client, logger logging.Logger) error {
+func SetupRequirementCRD(mgr manager.Manager, remoteClient client.Client, logger logging.Logger) error {
 	name := "RequirementCRD"
 	r := &RequirementCRDReconciler{
 		mgr: mgr,
 		local: rresource.ClientApplicator{
-			Client:     localClient,
-			Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+			Client:     mgr.GetClient(),
+			Applicator: rresource.NewAPIUpdatingApplicator(mgr.GetClient()),
 		},
-		remote: mgr.GetClient(),
+		remote: remoteClient,
 		log:    logger,
-		record: event.NewNopRecorder(),
+		record: event.NewAPIRecorder(mgr.GetEventRecorderFor(name)),
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).

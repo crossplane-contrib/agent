@@ -21,19 +21,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/crossplane/crossplane/apis/apiextensions"
-	"github.com/pkg/errors"
+	"github.com/crossplane/agent/cmd/local"
+	"github.com/crossplane/agent/cmd/remote"
+
 	"gopkg.in/alecthomas/kingpin.v2"
-	crds "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-
-	"github.com/crossplane/agent/pkg/controllers/cluster"
 )
 
 func main() {
@@ -45,6 +42,7 @@ func main() {
 	s := app.Command("sync", "Start syncing to Crossplane.").Default()
 	csa := s.Flag("cluster-kubeconfig", "File path of the kubeconfig of ServiceAccount to be used to get cluster-scoped resources like CRDs.").Envar("CLUSTER_KUBECONFIG").String()
 	dsa := s.Flag("default-kubeconfig", "File path of the  kubeconfig of ServiceAccount to be used for all namespaces that do not have override annotations.").Envar("DEFAULT_KUBECONFIG").String()
+	mode := s.Flag("mode", "The mode of operation to decide whether you would like to run the controllers that watch the local cluster or the remote cluster.").Enum("local", "remote")
 	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
 	if cmd != s.FullCommand() {
 		kingpin.FatalUsage("unknown command %s", cmd)
@@ -75,47 +73,18 @@ func main() {
 		}
 	}
 	duration, _ := time.ParseDuration("1h")
-	agent := &Agent{
-		period:        duration,
-		ClusterConfig: clusterConfig,
-		DefaultConfig: defaultConfig,
+	switch *mode {
+	case "local":
+		agent := &local.Agent{
+			ClusterConfig: clusterConfig,
+			DefaultConfig: defaultConfig,
+		}
+		kingpin.FatalIfError(agent.Run(logging.NewLogrLogger(zl.WithName("crossplane-agent")), duration), "cannot run agent in local mode")
+	case "remote":
+		agent := &remote.Agent{
+			ClusterConfig: clusterConfig,
+			DefaultConfig: defaultConfig,
+		}
+		kingpin.FatalIfError(agent.Run(logging.NewLogrLogger(zl.WithName("crossplane-agent")), duration), "cannot run agent in remote mode")
 	}
-
-	kingpin.FatalIfError(agent.Run(logging.NewLogrLogger(zl.WithName("crossplane-agent")), duration), "cannot run agent")
-}
-
-type Agent struct {
-	period    time.Duration
-	namespace string
-
-	ClusterConfig *rest.Config
-	DefaultConfig *rest.Config
-}
-
-func (a *Agent) Run(log logging.Logger, period time.Duration) error {
-	log.Debug("Starting", "sync-period", period.String())
-
-	localClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{})
-	if err != nil {
-		return errors.Wrap(err, "cannot create local client")
-	}
-
-	mgr, err := ctrl.NewManager(a.ClusterConfig, ctrl.Options{SyncPeriod: &period})
-	if err != nil {
-		return errors.Wrap(err, "cannot start remote cluster manager")
-	}
-
-	if err := crds.AddToScheme(mgr.GetScheme()); err != nil {
-		return errors.Wrap(err, "Cannot add CustomResourceDefinition API to scheme")
-	}
-
-	if err := apiextensions.AddToScheme(mgr.GetScheme()); err != nil {
-		return errors.Wrap(err, "Cannot add Crossplane apiextensions API to scheme")
-	}
-
-	if err := cluster.Setup(mgr, localClient, log); err != nil {
-		return errors.Wrap(err, "Cannot setup cluster controllers")
-	}
-
-	return errors.Wrap(mgr.Start(ctrl.SetupSignalHandler()), "cannot start controller manager")
 }
