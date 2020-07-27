@@ -37,9 +37,10 @@ import (
 )
 
 const (
-	timeout        = 2 * time.Minute
-	shortWait      = 30 * time.Second
-	longWait       = 1 * time.Minute
+	timeout   = 2 * time.Minute
+	longWait  = 1 * time.Minute
+	shortWait = 30 * time.Second
+
 	maxConcurrency = 5
 )
 
@@ -97,6 +98,6 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.local.Get(ctx, req.NamespacedName, crd); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in the local cluster")
 	}
-	resource.OverrideMetadata(existing, crd)
+	resource.OverrideOutputMetadata(existing, crd)
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply in the local cluster")
 }

@@ -19,15 +19,17 @@ package resource
 import (
 	"encoding/json"
 
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
+
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// OverrideMetadata makes it possible to use "to" object to correspond to the
+// OverrideOutputMetadata makes it possible to use "to" object to correspond to the
 // exact object in the cluster that "from" exists.
-func OverrideMetadata(from, to metav1.Object) {
+func OverrideOutputMetadata(from, to metav1.Object) {
 	to.SetResourceVersion(from.GetResourceVersion())
 	to.SetUID(from.GetUID())
 	to.SetCreationTimestamp(from.GetCreationTimestamp())
@@ -35,6 +37,13 @@ func OverrideMetadata(from, to metav1.Object) {
 	to.SetOwnerReferences(from.GetOwnerReferences())
 	to.SetManagedFields(from.GetManagedFields())
 	to.SetFinalizers(from.GetFinalizers())
+}
+
+func OverrideInputMetadata(from, to metav1.Object) {
+	to.SetName(from.GetName())
+	to.SetNamespace(from.GetNamespace())
+	to.SetAnnotations(from.GetAnnotations())
+	to.SetLabels(from.GetLabels())
 }
 
 // TODO(muvaf): EqualizeRequirementSpec could be separated into Propagate and
@@ -92,8 +101,10 @@ func EqualizeRequirementSpec(from, to *requirement.Unstructured) {
 // PropagateStatus uses the requirement status fields on "from" and writes them
 // to "to".
 func PropagateStatus(from, to *requirement.Unstructured) error {
-	status, _ := fieldpath.Pave(from.GetUnstructured().UnstructuredContent()).GetValue("status")
-
+	status, err := fieldpath.Pave(from.GetUnstructured().UnstructuredContent()).GetValue("status")
+	if err != nil {
+		return resource.Ignore(fieldpath.IsNotFound, err)
+	}
 	statusJSON, err := json.Marshal(status)
 	if err != nil {
 		return err

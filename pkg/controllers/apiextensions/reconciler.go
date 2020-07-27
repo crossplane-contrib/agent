@@ -154,7 +154,9 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.local.Get(ctx, req.NamespacedName, existing); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get instance in the local cluster")
 	}
-	resource.OverrideMetadata(existing, instance)
+
+	// TODO(muvaf): We need to call status update to bring the status subresource.
+	resource.OverrideOutputMetadata(existing, instance)
 	if err := r.local.Apply(ctx, instance); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot apply instance in the local cluster")
 	}

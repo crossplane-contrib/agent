@@ -19,9 +19,6 @@ package local
 import (
 	"time"
 
-	"github.com/crossplane/agent/pkg/controllers/requirement"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"github.com/pkg/errors"
 	crds "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/rest"
@@ -31,7 +28,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane/apis/apiextensions"
 
-	"github.com/crossplane/agent/pkg/controllers/crd"
+	"github.com/crossplane/agent/pkg/controllers/publication"
 )
 
 type Agent struct {
@@ -44,12 +41,6 @@ type Agent struct {
 
 func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 	log.Debug("Starting", "sync-period", period.String())
-
-	// TODO(muvaf): handle the case where no default config is given.
-	defaultRemoteClient, err := client.New(a.DefaultConfig, client.Options{})
-	if err != nil {
-		return errors.Wrap(err, "cannot create default remote client")
-	}
 
 	clusterRemoteClient, err := client.New(a.ClusterConfig, client.Options{})
 	if err != nil {
@@ -70,21 +61,10 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 	if err := apiextensions.AddToScheme(mgr.GetScheme()); err != nil {
 		return errors.Wrap(err, "Cannot add Crossplane apiextensions API to scheme")
 	}
-
-	if err := crd.SetupRequirementCRD(mgr, clusterRemoteClient, log); err != nil {
-		return errors.Wrap(err, "cannot setup requirement crd reconciler")
+	// TODO(muvaf): Need to pass in the default config.
+	if err := publication.Setup(mgr, clusterRemoteClient, log); err != nil {
+		return errors.Wrap(err, "cannot setup infrastructurepublication reconciler")
 	}
-	gvk := schema.GroupVersionKind{
-		Group:   "common.crossplane.io",
-		Version: "v1alpha1",
-		Kind:    "KubernetesClusterRequirement",
-	}
-	if err := requirement.SetupRequirement(mgr, defaultRemoteClient, gvk, log); err != nil {
-		return errors.Wrap(err, "cannot setup requirement reconciler")
-	}
-
-	// TODO(muvaf): A controller engine should be started here and it should spawn
-	// a syncer for each new requirement type.
 
 	return errors.Wrap(mgr.Start(ctrl.SetupSignalHandler()), "cannot start controller manager")
 }

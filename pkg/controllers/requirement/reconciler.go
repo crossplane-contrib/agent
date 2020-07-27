@@ -44,21 +44,25 @@ const (
 	shortWait = 30 * time.Second
 )
 
-func SetupRequirement(mgr manager.Manager, remoteClient client.Client, gvk schema.GroupVersionKind, logger logging.Logger) error {
-	name := gvk.GroupKind().String()
-	r := NewReconciler(mgr, remoteClient, gvk, logger)
+type ReconcilerOption func(*Reconciler)
 
-	return ctrl.NewControllerManagedBy(mgr).
-		Named(name).
-		For(requirement.New(requirement.WithGroupVersionKind(gvk)).GetUnstructured()).
-		Complete(r)
+func WithLogger(l logging.Logger) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.log = l
+	}
 }
 
-func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.GroupVersionKind, logger logging.Logger) *Reconciler {
+func WithRecorder(rec event.Recorder) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.record = rec
+	}
+}
+
+func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.GroupVersionKind, opts ...ReconcilerOption) *Reconciler {
 	ni := func() *requirement.Unstructured { return requirement.New(requirement.WithGroupVersionKind(gvk)) }
 	lc := unstructured.NewClient(mgr.GetClient())
 	rc := unstructured.NewClient(remoteClient)
-	return &Reconciler{
+	r := &Reconciler{
 		mgr: mgr,
 		local: rresource.ClientApplicator{
 			Client:     lc,
@@ -69,9 +73,14 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 			Applicator: rresource.NewAPIUpdatingApplicator(rc),
 		},
 		newInstance: ni,
-		log:         logger,
-		record:      event.NewAPIRecorder(mgr.GetEventRecorderFor(gvk.GroupKind().String())),
+		log:         logging.NewNopLogger(),
+		record:      event.NewNopRecorder(),
 	}
+
+	for _, f := range opts {
+		f(r)
+	}
+	return r
 }
 
 type Reconciler struct {
@@ -97,11 +106,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get requirement in the local cluster")
 	}
 	reRemote := r.newInstance()
-	err := r.remote.Get(ctx, req.NamespacedName, reRemote)
-	if rresource.IgnoreNotFound(err) != nil {
+	if err := r.remote.Get(ctx, req.NamespacedName, reRemote); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get requirement in the remote cluster")
 	}
 	// Update the remote object with latest desired state.
+	resource.OverrideInputMetadata(re, reRemote)
 	resource.EqualizeRequirementSpec(re, reRemote)
 	if err := r.remote.Apply(ctx, reRemote); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update requirement in the remote cluster")
@@ -139,7 +148,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.local.Get(ctx, lnn, ls); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get secret of the requirement from the local cluster")
 	}
-	resource.OverrideMetadata(ls, rs)
+	resource.OverrideOutputMetadata(ls, rs)
 	rs.SetNamespace(re.GetNamespace())
 	if err := r.local.Apply(ctx, rs); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update secret of the requirement in the local cluster")
