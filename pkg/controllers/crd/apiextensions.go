@@ -97,6 +97,6 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.local.Get(ctx, req.NamespacedName, crd); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in the local cluster")
 	}
-	resource.EqualizeMetadata(existing, crd)
+	resource.OverrideMetadata(existing, crd)
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply in the local cluster")
 }

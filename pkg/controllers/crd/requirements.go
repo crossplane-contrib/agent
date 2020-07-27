@@ -89,7 +89,7 @@ func (r *RequirementCRDReconciler) Reconcile(req reconcile.Request) (reconcile.R
 	if err := r.local.Get(ctx, nn, existing); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get CRD in the local cluster")
 	}
-	resource.EqualizeMetadata(existing, crd)
+	resource.OverrideMetadata(existing, crd)
 	meta.AddOwnerReference(crd, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply CRD in the local cluster")
 }

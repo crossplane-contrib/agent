@@ -17,19 +17,91 @@ limitations under the License.
 package resource
 
 import (
+	"encoding/json"
+
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func EqualizeMetadata(current, desired runtime.Object) {
-	d, _ := desired.(metav1.Object)
-	c, _ := current.(metav1.Object)
+// OverrideMetadata makes it possible to use "to" object to correspond to the
+// exact object in the cluster that "from" exists.
+func OverrideMetadata(from, to metav1.Object) {
+	to.SetResourceVersion(from.GetResourceVersion())
+	to.SetUID(from.GetUID())
+	to.SetCreationTimestamp(from.GetCreationTimestamp())
+	to.SetSelfLink(from.GetSelfLink())
+	to.SetOwnerReferences(from.GetOwnerReferences())
+	to.SetManagedFields(from.GetManagedFields())
+	to.SetFinalizers(from.GetFinalizers())
+}
 
-	d.SetResourceVersion(c.GetResourceVersion())
-	d.SetUID(c.GetUID())
-	d.SetCreationTimestamp(c.GetCreationTimestamp())
-	d.SetSelfLink(c.GetSelfLink())
-	d.SetOwnerReferences(nil)
-	d.SetManagedFields(nil)
-	d.SetFinalizers(c.GetFinalizers())
+// TODO(muvaf): EqualizeRequirementSpec could be separated into Propagate and
+// LateInitialize functions.
+
+// EqualizeRequirementSpec propagates desired state from "from" to "to" and updates
+// the "from" object with the latest observation of the fields that did not have
+// a desired value.
+func EqualizeRequirementSpec(from, to *requirement.Unstructured) {
+
+	// TODO(muvaf): This should include custom fields as well, which will probably
+	// require a traversal of an unknown map
+	toCurrent := requirement.New(func(u *requirement.Unstructured) {
+		u.SetUnstructuredContent(to.GetUnstructured().DeepCopy().UnstructuredContent())
+	})
+
+	// The whole spec is copied blindly and then later we make the corrections
+	// using toCurrent.
+	spec, _ := fieldpath.Pave(from.GetUnstructured().UnstructuredContent()).GetValue("spec")
+	_ = fieldpath.Pave(to.GetUnstructured().UnstructuredContent()).SetValue("spec", spec)
+	switch {
+	// We don't have an opinion about this field, so we late initialize its assigned
+	// value.
+	case from.GetCompositionSelector() == nil && toCurrent.GetCompositionSelector() != nil:
+		from.SetCompositionSelector(toCurrent.GetCompositionSelector())
+	// We do have an opinion about this field and it should override whatever is
+	// returned.
+	case from.GetCompositionSelector() != nil:
+		to.SetCompositionSelector(from.GetCompositionSelector())
+	}
+	// In the end, both "to" and "from" has our most up-to-date desired state that
+	// includes the fields that we didn't provide a value, i.e. late-inited.
+	// The same logic goes for all Requirement fields.
+
+	switch {
+	case from.GetCompositionReference() == nil && toCurrent.GetCompositionReference() != nil:
+		from.SetCompositionReference(toCurrent.GetCompositionReference())
+	case from.GetCompositionReference() != nil:
+		to.SetCompositionReference(from.GetCompositionReference())
+	}
+	switch {
+	case from.GetResourceReference() == nil && toCurrent.GetResourceReference() != nil:
+		from.SetResourceReference(toCurrent.GetResourceReference())
+	case from.GetResourceReference() != nil:
+		to.SetResourceReference(from.GetResourceReference())
+	}
+	switch {
+	case from.GetWriteConnectionSecretToReference() == nil && toCurrent.GetWriteConnectionSecretToReference() != nil:
+		from.SetWriteConnectionSecretToReference(toCurrent.GetWriteConnectionSecretToReference())
+	case from.GetWriteConnectionSecretToReference() != nil:
+		to.SetWriteConnectionSecretToReference(from.GetWriteConnectionSecretToReference())
+	}
+}
+
+// PropagateStatus uses the requirement status fields on "from" and writes them
+// to "to".
+func PropagateStatus(from, to *requirement.Unstructured) error {
+	status, _ := fieldpath.Pave(from.GetUnstructured().UnstructuredContent()).GetValue("status")
+
+	statusJSON, err := json.Marshal(status)
+	if err != nil {
+		return err
+	}
+	conditions := &v1alpha1.ConditionedStatus{}
+	if err := json.Unmarshal(statusJSON, conditions); err != nil {
+		return err
+	}
+	to.SetConditions(conditions.Conditions...)
+	return nil
 }
