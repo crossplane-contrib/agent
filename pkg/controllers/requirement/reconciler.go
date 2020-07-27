@@ -22,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
@@ -42,6 +44,8 @@ const (
 	timeout   = 2 * time.Minute
 	longWait  = 1 * time.Minute
 	shortWait = 30 * time.Second
+
+	finalizer = "agent.crossplane.io/sync"
 )
 
 type ReconcilerOption func(*Reconciler)
@@ -74,6 +78,7 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 		},
 		newInstance: ni,
 		log:         logging.NewNopLogger(),
+		finalizer:   rresource.NewAPIFinalizer(lc, finalizer),
 		record:      event.NewNopRecorder(),
 	}
 
@@ -89,6 +94,7 @@ type Reconciler struct {
 	remote rresource.ClientApplicator
 
 	newInstance func() *requirement.Unstructured
+	finalizer   rresource.Finalizer
 
 	log    logging.Logger
 	record event.Recorder
@@ -103,12 +109,33 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	re := r.newInstance()
 	if err := r.local.Get(ctx, req.NamespacedName, re); err != nil {
+		if kerrors.IsNotFound(err) {
+			return reconcile.Result{Requeue: false}, nil
+		}
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get requirement in the local cluster")
 	}
 	reRemote := r.newInstance()
-	if err := r.remote.Get(ctx, req.NamespacedName, reRemote); rresource.IgnoreNotFound(err) != nil {
+	err := r.remote.Get(ctx, req.NamespacedName, reRemote)
+	if rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get requirement in the remote cluster")
 	}
+	if meta.WasDeleted(re) {
+		if kerrors.IsNotFound(err) {
+			if err := r.finalizer.RemoveFinalizer(ctx, re); err != nil {
+				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot remove finalizer from requirement in the local cluster")
+			}
+			return reconcile.Result{}, nil
+		}
+		if err := r.remote.Delete(ctx, reRemote); rresource.IgnoreNotFound(err) != nil {
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot delete requirement in the remote cluster")
+		}
+		return reconcile.Result{RequeueAfter: shortWait}, nil
+	}
+
+	if err := r.finalizer.AddFinalizer(ctx, re); err != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot add finalizer to requirement in the local cluster")
+	}
+
 	// Update the remote object with latest desired state.
 	resource.OverrideInputMetadata(re, reRemote)
 	resource.EqualizeRequirementSpec(re, reRemote)
