@@ -44,6 +44,7 @@ const (
 	timeout   = 2 * time.Minute
 	longWait  = 1 * time.Minute
 	shortWait = 30 * time.Second
+	tinyWait  = 5 * time.Second
 
 	finalizer = "agent.crossplane.io/sync"
 )
@@ -129,7 +130,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		if err := r.remote.Delete(ctx, reRemote); rresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot delete requirement in the remote cluster")
 		}
-		return reconcile.Result{RequeueAfter: shortWait}, nil
+		return reconcile.Result{RequeueAfter: tinyWait}, nil
 	}
 
 	if err := r.finalizer.AddFinalizer(ctx, re); err != nil {
@@ -139,6 +140,17 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// Update the remote object with latest desired state.
 	resource.OverrideInputMetadata(re, reRemote)
 	resource.EqualizeRequirementSpec(re, reRemote)
+	// TODO(muvaf): Existing APIUpdatingApplicator is no-op if you don't supply
+	// UpdateFn and in this case that'd be just a repetition. Find a better way
+	// for this call.
+	if !meta.WasCreated(reRemote) {
+		if err = r.remote.Create(ctx, reRemote); err != nil {
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot create requirement in the remote cluster")
+		}
+	}
+	if err := r.remote.Update(ctx, reRemote); err != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update requirement in the remote cluster")
+	}
 	if err := r.remote.Apply(ctx, reRemote); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update requirement in the remote cluster")
 	}
@@ -172,11 +184,12 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		Name:      re.GetWriteConnectionSecretToReference().Name,
 		Namespace: re.GetNamespace(),
 	}
-	if err := r.local.Get(ctx, lnn, ls); err != nil {
+	if err := r.local.Get(ctx, lnn, ls); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get secret of the requirement from the local cluster")
 	}
 	resource.OverrideOutputMetadata(ls, rs)
 	rs.SetNamespace(re.GetNamespace())
+	meta.AddOwnerReference(rs, meta.AsController(meta.ReferenceTo(re, re.GroupVersionKind())))
 	if err := r.local.Apply(ctx, rs); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update secret of the requirement in the local cluster")
 	}
