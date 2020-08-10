@@ -47,6 +47,19 @@ const (
 	tinyWait  = 5 * time.Second
 
 	finalizer = "agent.crossplane.io/sync"
+
+	local  = "local cluster: "
+	remote = "remote cluster: "
+
+	errGetRequirement            = "cannot get requirement"
+	errDeleteRequirement         = "cannot delete requirement"
+	errCreateRequirement         = "cannot create requirement"
+	errUpdateRequirement         = "cannot update requirement"
+	errRemoveFinalizer           = "cannot remove finalizer"
+	errAddFinalizer              = "cannot add finalizer"
+	errGetSecret                 = "cannot get secret"
+	errUpdateSecretOfRequirement = "cannot update secret of the requirement"
+	errConvertStatusToLocal      = "cannot convert status of the requirement for the local object"
 )
 
 type ReconcilerOption func(*Reconciler)
@@ -113,28 +126,28 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		if kerrors.IsNotFound(err) {
 			return reconcile.Result{Requeue: false}, nil
 		}
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get requirement in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetRequirement)
 	}
 	reRemote := r.newInstance()
 	err := r.remote.Get(ctx, req.NamespacedName, reRemote)
 	if rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get requirement in the remote cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetRequirement)
 	}
 	if meta.WasDeleted(re) {
 		if kerrors.IsNotFound(err) {
 			if err := r.finalizer.RemoveFinalizer(ctx, re); err != nil {
-				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot remove finalizer from requirement in the local cluster")
+				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errRemoveFinalizer)
 			}
 			return reconcile.Result{}, nil
 		}
 		if err := r.remote.Delete(ctx, reRemote); rresource.IgnoreNotFound(err) != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot delete requirement in the remote cluster")
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errDeleteRequirement)
 		}
 		return reconcile.Result{RequeueAfter: tinyWait}, nil
 	}
 
 	if err := r.finalizer.AddFinalizer(ctx, re); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot add finalizer to requirement in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errAddFinalizer)
 	}
 
 	// Update the remote object with latest desired state.
@@ -145,26 +158,23 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// for this call.
 	if !meta.WasCreated(reRemote) {
 		if err = r.remote.Create(ctx, reRemote); err != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot create requirement in the remote cluster")
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errCreateRequirement)
 		}
 	}
 	if err := r.remote.Update(ctx, reRemote); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update requirement in the remote cluster")
-	}
-	if err := r.remote.Apply(ctx, reRemote); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update requirement in the remote cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errUpdateRequirement)
 	}
 	// TODO(muvaf): Update local object only if it's changed after late-init.
 	if err := r.local.Update(ctx, re); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update requirement in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errUpdateRequirement)
 	}
 
 	// Update the local object with latest observation.
 	if err := resource.PropagateStatus(reRemote, re); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot propagate status of the requirement to the requirement in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, errConvertStatusToLocal)
 	}
 	if err := r.local.Status().Update(ctx, re); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update status of requirement in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errUpdateRequirement)
 	}
 	if re.GetWriteConnectionSecretToReference() == nil {
 		return reconcile.Result{RequeueAfter: shortWait}, nil
@@ -177,7 +187,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		Namespace: reRemote.GetNamespace(),
 	}
 	if err := r.remote.Get(ctx, rnn, rs); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get secret of the requirement from the remote cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetSecret)
 	}
 	ls := &v1.Secret{}
 	lnn := types.NamespacedName{
@@ -185,13 +195,13 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		Namespace: re.GetNamespace(),
 	}
 	if err := r.local.Get(ctx, lnn, ls); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get secret of the requirement from the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetSecret)
 	}
 	resource.OverrideOutputMetadata(ls, rs)
 	rs.SetNamespace(re.GetNamespace())
 	meta.AddOwnerReference(rs, meta.AsController(meta.ReferenceTo(re, re.GroupVersionKind())))
 	if err := r.local.Apply(ctx, rs); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot update secret of the requirement in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errUpdateSecretOfRequirement)
 	}
 	return reconcile.Result{RequeueAfter: longWait}, nil
 }

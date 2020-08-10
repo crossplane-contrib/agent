@@ -18,6 +18,7 @@ package apiextensions
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -40,6 +41,16 @@ const (
 	timeout   = 2 * time.Minute
 	shortWait = 30 * time.Second
 	longWait  = 1 * time.Minute
+
+	local                = "local cluster: "
+	remote               = "remote cluster: "
+	msgNotEstablished    = "custom resource definition is not established yet"
+	errGetCRD            = "cannot get custom resource definition"
+	errCleanUp           = "cannot clean up"
+	errGetInstanceFmt    = "cannot get %s instance"
+	errListInstanceFmt   = "cannot list %s instances"
+	errDeleteInstanceFmt = "cannot delete %s instance"
+	errApplyInstanceFmt  = "cannot apply %s instance"
 )
 
 // ReconcilerOption is used to configure the Reconciler.
@@ -138,43 +149,43 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	crd := &v1beta1.CustomResourceDefinition{}
 	if err := r.local.Get(ctx, r.crdName, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crds in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetCRD)
 	}
 	if !ccrd.IsEstablished(crd.Status) {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.New("crd in local cluster is not established yet")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.New(local + msgNotEstablished)
 	}
 
 	instance := r.newInstance()
 	if err := r.remote.Get(ctx, req.NamespacedName, instance); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get instance in the remote cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
 	}
 	existing := r.newInstance()
 	// TODO(muvaf): This Get-Equalize-Apply is used in almost all reconcilers.
 	// We should implement an `Applicator` to do this automatically.
 	if err := r.local.Get(ctx, req.NamespacedName, existing); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get instance in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
 	}
 
 	// TODO(muvaf): We need to call status update to bring the status subresource.
 	resource.OverrideOutputMetadata(existing, instance)
 	if err := r.local.Apply(ctx, instance); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot apply instance in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
 	}
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.Cleanup(ctx), "cannot clean up the local cluster")
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.Cleanup(ctx), local+errCleanUp)
 }
 
 func (r *Reconciler) Cleanup(ctx context.Context) error {
 	removalList := map[string]bool{}
 	ll := r.newInstanceList()
 	if err := r.local.List(ctx, ll); err != nil {
-		return errors.Wrap(err, "cannot list instances in the local cluster")
+		return errors.Wrap(err, local+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
 	}
 	for _, obj := range r.getItems(ll) {
 		removalList[obj.GetName()] = true
 	}
 	rl := r.newInstanceList()
 	if err := r.remote.List(ctx, rl); err != nil {
-		return errors.Wrap(err, "cannot list instances in the remote cluster")
+		return errors.Wrap(err, remote+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
 	}
 	for _, obj := range r.getItems(rl) {
 		delete(removalList, obj.GetName())
@@ -183,7 +194,7 @@ func (r *Reconciler) Cleanup(ctx context.Context) error {
 		obj := r.newInstance()
 		obj.SetName(remove)
 		if err := r.local.Delete(ctx, obj); rresource.IgnoreNotFound(err) != nil {
-			return errors.Wrap(err, "cannot delete instance in the local cluster")
+			return errors.Wrap(err, local+fmt.Sprintf(errDeleteInstanceFmt, r.crdName.Name))
 		}
 	}
 	return nil

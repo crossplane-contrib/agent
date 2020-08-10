@@ -42,6 +42,11 @@ const (
 	shortWait = 30 * time.Second
 
 	maxConcurrency = 5
+
+	local       = "local cluster: "
+	remote      = "remote cluster: "
+	errGetCRD   = "cannot get custom resource definition"
+	errApplyCRD = "cannot get custom resource definition"
 )
 
 func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger) error {
@@ -92,12 +97,12 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	crd := &v1beta1.CustomResourceDefinition{}
 	if err := r.remote.Get(ctx, req.NamespacedName, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in the remote cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetCRD)
 	}
 	existing := &v1beta1.CustomResourceDefinition{}
 	if err := r.local.Get(ctx, req.NamespacedName, crd); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get crd in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetCRD)
 	}
 	resource.OverrideOutputMetadata(existing, crd)
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd), "cannot apply in the local cluster")
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd), local+errApplyCRD)
 }

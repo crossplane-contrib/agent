@@ -56,9 +56,14 @@ const (
 	shortWait = 30 * time.Second
 	tinyWait  = 3 * time.Second
 
-	finalizer = "agent.crossplane.io/crequirement-controller"
+	finalizer = "agent.crossplane.io/requirement-crd-controller"
 
-	errUpdateStatus = "cannot update status of infrastructurepublication"
+	local             = "local cluster: "
+	remote            = "remote cluster: "
+	errUpdateStatus   = "cannot update status of infrastructure publication"
+	errGetPublication = "cannot get infrastructure publication"
+	errGetCRD         = "cannot get custom resoruce definition"
+	errApplyCRD       = "cannot apply custom resource definition"
 )
 
 func Setup(mgr manager.Manager, remoteClient client.Client, logger logging.Logger) error {
@@ -103,17 +108,17 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	p := &v1alpha1.InfrastructurePublication{}
 	if err := r.local.Get(ctx, req.NamespacedName, p); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get infrastructurepublication in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetPublication)
 	}
 	gk := schema.ParseGroupKind(p.Spec.InfrastructureDefinitionReference.Name)
 	crd := &v1beta1.CustomResourceDefinition{}
 	nn := types.NamespacedName{Name: fmt.Sprintf("%s%s.%s", gk.Kind[:len(gk.Kind)-1], ccrd.PublishedInfrastructureSuffixPlural, gk.Group)}
 	if err := r.remote.Get(ctx, nn, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get CRD in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetCRD)
 	}
 	existing := &v1beta1.CustomResourceDefinition{}
 	if err := r.local.Get(ctx, nn, existing); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot get CRD in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetCRD)
 	}
 	gvk := schema.GroupVersionKind{
 		Group:   crd.Spec.Group,
@@ -143,7 +148,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 			r.engine.Stop(crequirement.ControllerName(p.GetName()))
 
 			if err := r.finalizer.RemoveFinalizer(ctx, crd); err != nil {
-				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 			}
 
 			// We're all done deleting and have removed our finalizer. There's
@@ -154,7 +159,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		l := &kunstructured.UnstructuredList{}
 		l.SetGroupVersionKind(gvk)
 		if err := r.local.List(ctx, l); rresource.Ignore(kmeta.IsNoMatchError, err) != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 		}
 
 		// Ensure all the custom resources we defined are gone before stopping
@@ -166,14 +171,14 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 			// being namespaced rather than cluster scoped?
 			for i := range l.Items {
 				if err := r.local.Delete(ctx, &l.Items[i]); rresource.IgnoreNotFound(err) != nil {
-					return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+					return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 				}
 			}
 
 			// We requeue to confirm that all the custom resources we just
 			// deleted are actually gone. We need to requeue after a tiny wait
 			// because we won't be requeued implicitly when the CRs are deleted.
-			return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+			return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 		}
 
 		// The controller should be stopped before the deletion of CRD so that
@@ -181,24 +186,24 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		r.engine.Stop(crequirement.ControllerName(p.GetName()))
 
 		if err := r.local.Delete(ctx, crd); rresource.IgnoreNotFound(err) != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 		}
 
 		// We should be requeued implicitly because we're watching the
 		// CustomResourceDefinition that we just deleted, but we requeue after
 		// a tiny wait just in case the CRD isn't gone after the first requeue.
 		p.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
-		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 	}
 
 	resource.OverrideOutputMetadata(existing, crd)
 	meta.AddOwnerReference(crd, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
 	if err := r.local.Apply(ctx, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, "cannot apply CRD in the local cluster")
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errApplyCRD)
 	}
 
 	if !ccrd.IsEstablished(crd.Status) {
-		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 	}
 	o := kcontroller.Options{Reconciler: requirement.NewReconciler(r.mgr,
 		r.remote,
@@ -213,10 +218,10 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.engine.Start(crequirement.ControllerName(p.GetName()), o,
 		controller.For(rq, &handler.EnqueueRequestForObject{}),
 	); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 	}
 
 	p.Status.SetConditions(v1alpha1.Started())
 	p.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 }
