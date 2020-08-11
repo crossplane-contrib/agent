@@ -58,13 +58,13 @@ type ReconcilerOption func(*Reconciler)
 
 func WithNewListFn(f func() runtime.Object) ReconcilerOption {
 	return func(r *Reconciler) {
-		r.newInstanceList = f
+		r.newObjectList = f
 	}
 }
 
 func WithNewInstanceFn(f func() rresource.Object) ReconcilerOption {
 	return func(r *Reconciler) {
-		r.newInstance = f
+		r.newObject = f
 	}
 }
 
@@ -131,10 +131,10 @@ type Reconciler struct {
 	local  rresource.ClientApplicator
 	mgr    manager.Manager
 
-	crdName         types.NamespacedName
-	newInstanceList func() runtime.Object
-	getItems        func(l runtime.Object) []rresource.Object
-	newInstance     func() rresource.Object
+	crdName       types.NamespacedName
+	newObjectList func() runtime.Object
+	getItems      func(l runtime.Object) []rresource.Object
+	newObject     func() rresource.Object
 
 	log    logging.Logger
 	record event.Recorder
@@ -155,28 +155,28 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.New(local + msgNotEstablished)
 	}
 
-	instance := r.newInstance()
-	if err := r.remote.Get(ctx, req.NamespacedName, instance); err != nil {
+	ro := r.newObject()
+	if err := r.remote.Get(ctx, req.NamespacedName, ro); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
 	}
-
-	// TODO(muvaf): We need to call status update to bring the status subresource.
-	if err := r.local.Apply(ctx, instance, resource.OverrideGeneratedMetadata); err != nil {
+	lo := ro.DeepCopyObject()
+	if err := r.local.Apply(ctx, lo, resource.OverrideGeneratedMetadata); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
 	}
+	// TODO(muvaf): We need to call status update to bring the status subresource.
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.Cleanup(ctx), local+errCleanUp)
 }
 
 func (r *Reconciler) Cleanup(ctx context.Context) error {
 	removalList := map[string]bool{}
-	ll := r.newInstanceList()
+	ll := r.newObjectList()
 	if err := r.local.List(ctx, ll); err != nil {
 		return errors.Wrap(err, local+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
 	}
 	for _, obj := range r.getItems(ll) {
 		removalList[obj.GetName()] = true
 	}
-	rl := r.newInstanceList()
+	rl := r.newObjectList()
 	if err := r.remote.List(ctx, rl); err != nil {
 		return errors.Wrap(err, remote+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
 	}
@@ -184,7 +184,7 @@ func (r *Reconciler) Cleanup(ctx context.Context) error {
 		delete(removalList, obj.GetName())
 	}
 	for remove := range removalList {
-		obj := r.newInstance()
+		obj := r.newObject()
 		obj.SetName(remove)
 		if err := r.local.Delete(ctx, obj); rresource.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, local+fmt.Sprintf(errDeleteInstanceFmt, r.crdName.Name))

@@ -51,7 +51,21 @@ const (
 
 func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger) error {
 	name := "CustomResourceDefinitions"
-	r := &Reconciler{
+	r := NewReconciler(mgr, localClient, logger)
+	return ctrl.NewControllerManagedBy(mgr).
+		Named(name).
+		For(&v1beta1.CustomResourceDefinition{}).
+		WithOptions(kcontroller.Options{MaxConcurrentReconciles: maxConcurrency}).
+		WithEventFilter(resource.NewNameFilter([]types.NamespacedName{
+			{Name: "infrastructuredefinitions.apiextensions.crossplane.io"},
+			{Name: "infrastructurepublications.apiextensions.crossplane.io"},
+			{Name: "compositions.apiextensions.crossplane.io"},
+		})).
+		Complete(r)
+}
+
+func NewReconciler(mgr manager.Manager, localClient client.Client, logger logging.Logger) *Reconciler {
+	return &Reconciler{
 		mgr: mgr,
 		local: rresource.ClientApplicator{
 			Client:     localClient,
@@ -65,16 +79,6 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 		// just kubeconfig.
 		record: event.NewNopRecorder(),
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		Named(name).
-		For(&v1beta1.CustomResourceDefinition{}).
-		WithOptions(kcontroller.Options{MaxConcurrentReconciles: maxConcurrency}).
-		WithEventFilter(resource.NewNameFilter([]types.NamespacedName{
-			{Name: "infrastructuredefinitions.apiextensions.crossplane.io"},
-			{Name: "infrastructurepublications.apiextensions.crossplane.io"},
-			{Name: "compositions.apiextensions.crossplane.io"},
-		})).
-		Complete(r)
 }
 
 type Reconciler struct {
@@ -99,5 +103,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.remote.Get(ctx, req.NamespacedName, crd); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetCRD)
 	}
+	// TODO(muvaf): Set condition on local CRD to tell when is the last time
+	// it's been synced.
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd, resource.OverrideGeneratedMetadata), local+errApplyCRD)
 }
