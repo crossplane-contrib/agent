@@ -196,9 +196,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
 	}
 
-	resource.OverrideOutputMetadata(existing, crd)
 	meta.AddOwnerReference(crd, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
-	if err := r.local.Apply(ctx, crd); err != nil {
+	if err := r.local.Apply(ctx, crd, resource.OverrideGeneratedMetadata); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errApplyCRD)
 	}
 

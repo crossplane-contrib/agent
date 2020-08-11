@@ -2,6 +2,8 @@ module github.com/crossplane/agent
 
 go 1.13
 
+replace github.com/crossplane/crossplane-runtime => github.com/muvaf/crossplane-runtime v0.0.0-20200811131745-38e9a848fa0c
+
 require (
 	github.com/crossplane/crossplane v0.13.0-rc.0.20200714032609-a4570446bc0f
 	github.com/crossplane/crossplane-runtime v0.9.1-0.20200629170915-9a9a434f7321

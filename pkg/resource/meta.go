@@ -17,26 +17,38 @@ limitations under the License.
 package resource
 
 import (
+	"context"
 	"encoding/json"
 
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// OverrideOutputMetadata makes it possible to use "to" object to correspond to the
+// OverrideGeneratedMetadata makes it possible to use "to" object to correspond to the
 // exact object in the cluster that "from" exists.
-func OverrideOutputMetadata(from, to metav1.Object) {
-	to.SetResourceVersion(from.GetResourceVersion())
-	to.SetUID(from.GetUID())
-	to.SetCreationTimestamp(from.GetCreationTimestamp())
-	to.SetSelfLink(from.GetSelfLink())
-	to.SetOwnerReferences(from.GetOwnerReferences())
-	to.SetManagedFields(from.GetManagedFields())
-	to.SetFinalizers(from.GetFinalizers())
+func OverrideGeneratedMetadata(_ context.Context, from, to runtime.Object) error {
+	fromM, ok := from.(metav1.Object)
+	if !ok {
+		return errors.New("source object does not satisfy metav1.Object")
+	}
+	toM, ok := to.(metav1.Object)
+	if !ok {
+		return errors.New("target object does not satisfy metav1.Object")
+	}
+	toM.SetResourceVersion(fromM.GetResourceVersion())
+	toM.SetUID(fromM.GetUID())
+	toM.SetCreationTimestamp(fromM.GetCreationTimestamp())
+	toM.SetSelfLink(fromM.GetSelfLink())
+	toM.SetOwnerReferences(fromM.GetOwnerReferences())
+	toM.SetManagedFields(fromM.GetManagedFields())
+	toM.SetFinalizers(fromM.GetFinalizers())
+	return nil
 }
 
 func OverrideInputMetadata(from, to metav1.Object) {

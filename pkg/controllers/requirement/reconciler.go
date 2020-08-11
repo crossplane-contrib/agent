@@ -186,21 +186,19 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		Name:      reRemote.GetWriteConnectionSecretToReference().Name,
 		Namespace: reRemote.GetNamespace(),
 	}
-	if err := r.remote.Get(ctx, rnn, rs); err != nil {
+	err = r.remote.Get(ctx, rnn, rs)
+	if rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetSecret)
 	}
-	ls := &v1.Secret{}
-	lnn := types.NamespacedName{
-		Name:      re.GetWriteConnectionSecretToReference().Name,
-		Namespace: re.GetNamespace(),
+	if kerrors.IsNotFound(err) {
+		// TODO(muvaf): Set condition to say waiting for secret.
+		return reconcile.Result{RequeueAfter: longWait}, nil
 	}
-	if err := r.local.Get(ctx, lnn, ls); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetSecret)
-	}
-	resource.OverrideOutputMetadata(ls, rs)
-	rs.SetNamespace(re.GetNamespace())
-	meta.AddOwnerReference(rs, meta.AsController(meta.ReferenceTo(re, re.GroupVersionKind())))
-	if err := r.local.Apply(ctx, rs); err != nil {
+	ls := rs.DeepCopy()
+	ls.SetName(re.GetWriteConnectionSecretToReference().Name)
+	ls.SetNamespace(re.GetNamespace())
+	meta.AddOwnerReference(ls, meta.AsController(meta.ReferenceTo(re, re.GroupVersionKind())))
+	if err := r.local.Apply(ctx, ls, resource.OverrideGeneratedMetadata); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errUpdateSecretOfRequirement)
 	}
 	return reconcile.Result{RequeueAfter: longWait}, nil

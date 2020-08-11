@@ -159,16 +159,9 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.remote.Get(ctx, req.NamespacedName, instance); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
 	}
-	existing := r.newInstance()
-	// TODO(muvaf): This Get-Equalize-Apply is used in almost all reconcilers.
-	// We should implement an `Applicator` to do this automatically.
-	if err := r.local.Get(ctx, req.NamespacedName, existing); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
-	}
 
 	// TODO(muvaf): We need to call status update to bring the status subresource.
-	resource.OverrideOutputMetadata(existing, instance)
-	if err := r.local.Apply(ctx, instance); err != nil {
+	if err := r.local.Apply(ctx, instance, resource.OverrideGeneratedMetadata); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
 	}
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.Cleanup(ctx), local+errCleanUp)
