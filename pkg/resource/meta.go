@@ -111,7 +111,7 @@ func EqualizeRequirementSpec(from, to *requirement.Unstructured) {
 }
 
 // PropagateStatus uses the requirement status fields on "from" and writes them
-// to "to".
+// to "to". It never removes the existing conditions.
 func PropagateStatus(from, to *requirement.Unstructured) error {
 	status, err := fieldpath.Pave(from.GetUnstructured().UnstructuredContent()).GetValue("status")
 	if err != nil {

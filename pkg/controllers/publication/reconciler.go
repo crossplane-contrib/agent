@@ -121,8 +121,9 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetCRD)
 	}
 	gvk := schema.GroupVersionKind{
-		Group:   crd.Spec.Group,
-		Kind:    crd.Spec.Names.Kind,
+		Group: crd.Spec.Group,
+		Kind:  crd.Spec.Names.Kind,
+		// TODO(muvaf): Choose the one that is accepted by the api-server.
 		Version: crd.Spec.Versions[len(crd.Spec.Versions)-1].Name,
 	}
 	if meta.WasDeleted(p) {
