@@ -33,13 +33,13 @@ func NewNopRenderer() NopRenderer {
 
 type NopRenderer struct{}
 
-func (n NopRenderer) Render(ctx context.Context, ip *v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
+func (n NopRenderer) Render(_ context.Context, _ v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
 	return nil, nil
 }
 
-type RenderFn func(ctx context.Context, ip *v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
+type RenderFn func(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
 
-func (r RenderFn) Render(ctx context.Context, ip *v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
+func (r RenderFn) Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
 	return r(ctx, ip)
 }
 
@@ -53,7 +53,7 @@ type APIRemoteCRDRenderer struct {
 	client client.Client
 }
 
-func (r *APIRemoteCRDRenderer) Render(ctx context.Context, ip *v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
+func (r *APIRemoteCRDRenderer) Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
 	remote := &v1beta1.CustomResourceDefinition{}
 	if err := r.client.Get(ctx, CRDNameOf(ip), remote); err != nil {
 		return nil, errors.Wrap(err, errGetCRD)

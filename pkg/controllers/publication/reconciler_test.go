@@ -103,7 +103,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return nil, errBoom
 					})),
 				},
@@ -165,7 +165,7 @@ func TestReconcile(t *testing.T) {
 							return errBoom
 						},
 					}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -200,7 +200,7 @@ func TestReconcile(t *testing.T) {
 							return nil
 						},
 					}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -231,7 +231,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -278,7 +278,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -326,7 +326,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -368,7 +368,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -412,7 +412,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -465,7 +465,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -491,7 +491,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -515,7 +515,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							Status: apiextensions.CustomResourceDefinitionStatus{
 								Conditions: []apiextensions.CustomResourceDefinitionCondition{
@@ -553,7 +553,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ *v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.InfrastructurePublication) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							Status: apiextensions.CustomResourceDefinitionStatus{
 								Conditions: []apiextensions.CustomResourceDefinitionCondition{

@@ -153,7 +153,7 @@ type ControllerEngine interface {
 }
 
 type CRDRenderer interface {
-	Render(ctx context.Context, ip *v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
+	Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
 }
 
 type Reconciler struct {
@@ -180,7 +180,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.local.Get(ctx, req.NamespacedName, p); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetPublication)
 	}
-	local, err := r.crd.Render(ctx, p)
+	local, err := r.crd.Render(ctx, *p)
 	if rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errRenderCRD)
 	}
@@ -188,7 +188,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if meta.WasDeleted(p) {
 		p.Status.SetConditions(v1alpha1.Deleting())
 
-		err := r.local.Get(ctx, CRDNameOf(p), local)
+		err := r.local.Get(ctx, CRDNameOf(*p), local)
 		if rresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
 		}
@@ -215,7 +215,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		}
 
 		l := &kunstructured.UnstructuredList{}
-		l.SetGroupVersionKind(GroupVersionKindOf(local))
+		l.SetGroupVersionKind(GroupVersionKindOf(*local))
 		if err := r.local.List(ctx, l); rresource.Ignore(kmeta.IsNoMatchError, err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errListCR)
 		}
@@ -268,13 +268,13 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 	o := kcontroller.Options{Reconciler: requirement.NewReconciler(r.mgr,
 		r.remote,
-		GroupVersionKindOf(local),
+		GroupVersionKindOf(*local),
 		requirement.WithLogger(log.WithValues("controller", crequirement.ControllerName(p.GetName()))),
 		requirement.WithRecorder(r.record.WithAnnotations("controller", crequirement.ControllerName(p.GetName()))),
 	)}
 
 	rq := &kunstructured.Unstructured{}
-	rq.SetGroupVersionKind(GroupVersionKindOf(local))
+	rq.SetGroupVersionKind(GroupVersionKindOf(*local))
 
 	if err := r.engine.Start(crequirement.ControllerName(p.GetName()), o,
 		controller.For(rq, &handler.EnqueueRequestForObject{}),

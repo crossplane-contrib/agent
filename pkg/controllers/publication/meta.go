@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func CRDNameOf(ip *v1alpha1.InfrastructurePublication) types.NamespacedName {
+func CRDNameOf(ip v1alpha1.InfrastructurePublication) types.NamespacedName {
 	gk := schema.ParseGroupKind(ip.Spec.InfrastructureDefinitionReference.Name)
 	if len(gk.Kind) == 0 || len(gk.Group) == 0 {
 		return types.NamespacedName{}
@@ -37,7 +37,7 @@ func CRDNameOf(ip *v1alpha1.InfrastructurePublication) types.NamespacedName {
 	return types.NamespacedName{Name: fmt.Sprintf("%s%s.%s", gk.Kind[:len(gk.Kind)-1], ccrd.PublishedInfrastructureSuffixPlural, gk.Group)}
 }
 
-func GroupVersionKindOf(crd *v1beta1.CustomResourceDefinition) schema.GroupVersionKind {
+func GroupVersionKindOf(crd v1beta1.CustomResourceDefinition) schema.GroupVersionKind {
 	servedVersion := crd.Spec.Version
 	for _, v := range crd.Spec.Versions {
 		if v.Served {
