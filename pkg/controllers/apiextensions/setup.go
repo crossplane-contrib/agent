@@ -48,17 +48,18 @@ func SetupInfraDefSync(mgr ctrl.Manager, localClient client.Client, log logging.
 		return result
 	}
 	ni := func() rresource.Object { return &v1alpha1.InfrastructureDefinition{} }
+	ca := rresource.ClientApplicator{
+		Client:     localClient,
+		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+	}
 
 	r := NewReconciler(mgr,
+		ca,
 		WithLogger(log.WithValues("controller", name)),
 		WithCRDName(infraDefCRDName),
 		WithNewInstanceFn(ni),
 		WithNewListFn(nl),
-		WithGetItemsFn(gi),
-		WithLocalClient(rresource.ClientApplicator{
-			Client:     localClient,
-			Applicator: rresource.NewAPIUpdatingApplicator(localClient),
-		}))
+		WithGetItemsFn(gi))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
@@ -82,17 +83,18 @@ func SetupInfraPubSync(mgr ctrl.Manager, localClient client.Client, log logging.
 		return result
 	}
 	ni := func() rresource.Object { return &v1alpha1.InfrastructurePublication{} }
+	ca := rresource.ClientApplicator{
+		Client:     localClient,
+		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+	}
 
 	r := NewReconciler(mgr,
+		ca,
 		WithLogger(log.WithValues("controller", name)),
 		WithCRDName(infraPubCRDName),
 		WithNewInstanceFn(ni),
 		WithNewListFn(nl),
-		WithGetItemsFn(gi),
-		WithLocalClient(rresource.ClientApplicator{
-			Client:     localClient,
-			Applicator: rresource.NewAPIUpdatingApplicator(localClient),
-		}))
+		WithGetItemsFn(gi))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
@@ -116,17 +118,18 @@ func SetupCompositionSync(mgr ctrl.Manager, localClient client.Client, log loggi
 		return result
 	}
 	ni := func() rresource.Object { return &v1alpha1.Composition{} }
+	ca := rresource.ClientApplicator{
+		Client:     localClient,
+		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+	}
 
 	r := NewReconciler(mgr,
+		ca,
 		WithLogger(log.WithValues("controller", name)),
 		WithCRDName(compositionCRDName),
 		WithNewInstanceFn(ni),
 		WithNewListFn(nl),
-		WithGetItemsFn(gi),
-		WithLocalClient(rresource.ClientApplicator{
-			Client:     localClient,
-			Applicator: rresource.NewAPIUpdatingApplicator(localClient),
-		}))
+		WithGetItemsFn(gi))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).

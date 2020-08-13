@@ -39,14 +39,13 @@ import (
 
 const (
 	timeout   = 2 * time.Minute
-	shortWait = 30 * time.Second
 	longWait  = 1 * time.Minute
+	shortWait = 30 * time.Second
+	tinyWait  = 3 * time.Second
 
-	local                = "local cluster: "
-	remote               = "remote cluster: "
-	msgNotEstablished    = "custom resource definition is not established yet"
+	localPrefix          = "local cluster: "
+	remotePrefix         = "remote cluster: "
 	errGetCRD            = "cannot get custom resource definition"
-	errCleanUp           = "cannot clean up"
 	errGetInstanceFmt    = "cannot get %s instance"
 	errListInstanceFmt   = "cannot list %s instances"
 	errDeleteInstanceFmt = "cannot delete %s instance"
@@ -82,22 +81,6 @@ func WithCRDName(name string) ReconcilerOption {
 	}
 }
 
-// WithLocalClient specifies the Client of the local cluster that Reconciler
-// should create resources in.
-func WithLocalClient(cl rresource.ClientApplicator) ReconcilerOption {
-	return func(r *Reconciler) {
-		r.local = cl
-	}
-}
-
-// WithRemoteClient specifies the Client of the remote cluster that Reconciler
-// should read resources from. Defaults to the manager's client.
-func WithRemoteClient(cl client.Client) ReconcilerOption {
-	return func(r *Reconciler) {
-		r.remote = cl
-	}
-}
-
 // WithLogger specifies how the Reconciler should log messages.
 func WithLogger(log logging.Logger) ReconcilerOption {
 	return func(r *Reconciler) {
@@ -112,11 +95,12 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 	}
 }
 
-func NewReconciler(mgr manager.Manager, opts ...ReconcilerOption) *Reconciler {
+func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientApplicator, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		mgr:    mgr,
 		log:    logging.NewNopLogger(),
 		remote: mgr.GetClient(),
+		local:  localClientApplicator,
 	}
 
 	for _, f := range opts {
@@ -126,6 +110,8 @@ func NewReconciler(mgr manager.Manager, opts ...ReconcilerOption) *Reconciler {
 	return r
 }
 
+// Reconciler syncs the instances of given CRD in remote->local direction. It
+// supports only cluster-scoped resources.
 type Reconciler struct {
 	remote client.Client
 	local  rresource.ClientApplicator
@@ -149,36 +135,39 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	crd := &v1beta1.CustomResourceDefinition{}
 	if err := r.local.Get(ctx, r.crdName, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetCRD)
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
 	}
 	if !ccrd.IsEstablished(crd.Status) {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.New(local + msgNotEstablished)
+		return reconcile.Result{RequeueAfter: tinyWait}, nil
 	}
 
 	ro := r.newObject()
 	if err := r.remote.Get(ctx, req.NamespacedName, ro); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
 	}
 	lo := ro.DeepCopyObject()
 	if err := r.local.Apply(ctx, lo, resource.OverrideGeneratedMetadata); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
 	}
-	// TODO(muvaf): We need to call status update to bring the status subresource.
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.Cleanup(ctx), local+errCleanUp)
-}
+	// TODO(muvaf): We need to call status update to bring the status subresource
+	// of the resources.
 
-func (r *Reconciler) Cleanup(ctx context.Context) error {
+	// When an instance in the remote cluster is deleted, it's not guaranteed that
+	// we will get a deletion event for a number of reasons including agent not
+	// being up at that time. Since reconciliation is called only for the existing
+	// resources, we need to delete the resources in the local that do not have
+	// a corresponding resource in the remote cluster.
 	removalList := map[string]bool{}
 	ll := r.newObjectList()
 	if err := r.local.List(ctx, ll); err != nil {
-		return errors.Wrap(err, local+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
 	}
 	for _, obj := range r.getItems(ll) {
 		removalList[obj.GetName()] = true
 	}
 	rl := r.newObjectList()
 	if err := r.remote.List(ctx, rl); err != nil {
-		return errors.Wrap(err, remote+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
 	}
 	for _, obj := range r.getItems(rl) {
 		delete(removalList, obj.GetName())
@@ -187,8 +176,8 @@ func (r *Reconciler) Cleanup(ctx context.Context) error {
 		obj := r.newObject()
 		obj.SetName(remove)
 		if err := r.local.Delete(ctx, obj); rresource.IgnoreNotFound(err) != nil {
-			return errors.Wrap(err, local+fmt.Sprintf(errDeleteInstanceFmt, r.crdName.Name))
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errDeleteInstanceFmt, r.crdName.Name))
 		}
 	}
-	return nil
+	return reconcile.Result{RequeueAfter: longWait}, nil
 }
