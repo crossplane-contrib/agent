@@ -18,19 +18,14 @@ package publication
 
 import (
 	"context"
-	"fmt"
+
 	"time"
 
-	"github.com/crossplane/agent/pkg/controllers/requirement"
-
-	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/pkg/errors"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	kmeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kunstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -38,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	runtimev1alpha1 "github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
@@ -47,6 +43,7 @@ import (
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
 	crequirement "github.com/crossplane/crossplane/pkg/controller/apiextensions/requirement"
 
+	"github.com/crossplane/agent/pkg/controllers/requirement"
 	"github.com/crossplane/agent/pkg/resource"
 )
 
@@ -58,16 +55,79 @@ const (
 
 	finalizer = "agent.crossplane.io/requirement-crd-controller"
 
-	local             = "local cluster: "
-	remote            = "remote cluster: "
-	errUpdateStatus   = "cannot update status of infrastructure publication"
-	errGetPublication = "cannot get infrastructure publication"
-	errGetCRD         = "cannot get custom resoruce definition"
-	errApplyCRD       = "cannot apply custom resource definition"
+	localPrefix        = "local cluster: "
+	remotePrefix       = "remote cluster: "
+	errUpdateStatus    = "cannot update status of infrastructure publication"
+	errStartController = "cannot start controller"
+	errRemoveFinalizer = "cannot remove finalizer"
+	errGetPublication  = "cannot get infrastructure publication"
+	errRenderCRD       = "cannot render a crd from remote infrastructurepublication"
+	errGetCRD          = "cannot get custom resoruce definition"
+	errApplyCRD        = "cannot apply custom resource definition"
+	errListCR          = "cannot list custom resources of published type"
+	errDeleteCR        = "cannot delete custom resources of published type"
+	errDeleteCRD       = "cannot delete crd of published type"
+	errAddFinalizerPub = "cannot add finalizer to infrastructurepublication"
 )
 
 func Setup(mgr manager.Manager, remoteClient client.Client, logger logging.Logger) error {
 	name := "RequirementCRD"
+	r := NewReconciler(mgr, remoteClient,
+		WithCRDRenderer(NewAPIRemoteCRDRenderer(remoteClient)),
+		WithLogger(logger),
+		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))))
+	return ctrl.NewControllerManagedBy(mgr).
+		Named(name).
+		For(&v1alpha1.InfrastructurePublication{}).
+		Owns(&v1beta1.CustomResourceDefinition{}).
+		Complete(r)
+}
+
+// WithControllerEngine specifies how the Reconciler should start and stop controllers.
+func WithControllerEngine(c ControllerEngine) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.engine = c
+	}
+}
+
+// WithCRDRenderer specifies how the Reconciler should add and remove finalizers.
+func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.finalizer = f
+	}
+}
+
+// WithCRDRenderer specifies how the Reconciler should render CRDs.
+func WithCRDRenderer(re CRDRenderer) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.crd = re
+	}
+}
+
+// WithLogger specifies how the Reconciler should log messages.
+func WithLocalApplicator(a rresource.Applicator) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.local.Applicator = a
+	}
+}
+
+// WithLogger specifies how the Reconciler should log messages.
+func WithLogger(log logging.Logger) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.log = log
+	}
+}
+
+// WithRecorder specifies how the Reconciler should record Kubernetes events.
+func WithRecorder(er event.Recorder) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.record = er
+	}
+}
+
+type ReconcilerOption func(*Reconciler)
+
+func NewReconciler(mgr manager.Manager, remoteClient client.Client, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		mgr: mgr,
 		local: rresource.ClientApplicator{
@@ -76,15 +136,24 @@ func Setup(mgr manager.Manager, remoteClient client.Client, logger logging.Logge
 		},
 		remote:    remoteClient,
 		engine:    controller.NewEngine(mgr),
+		crd:       NewNopRenderer(),
 		finalizer: rresource.NewAPIFinalizer(mgr.GetClient(), finalizer),
-		log:       logger,
-		record:    event.NewAPIRecorder(mgr.GetEventRecorderFor(name)),
+		log:       logging.NewNopLogger(),
+		record:    event.NewNopRecorder(),
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		Named(name).
-		For(&v1alpha1.InfrastructurePublication{}).
-		Owns(&v1beta1.CustomResourceDefinition{}).
-		Complete(r)
+	for _, f := range opts {
+		f(r)
+	}
+	return r
+}
+
+type ControllerEngine interface {
+	Start(name string, o kcontroller.Options, w ...controller.Watch) error
+	Stop(name string)
+}
+
+type CRDRenderer interface {
+	Render(ctx context.Context, ip *v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
 }
 
 type Reconciler struct {
@@ -92,7 +161,8 @@ type Reconciler struct {
 	local  rresource.ClientApplicator
 	remote client.Client
 
-	engine    *controller.Engine
+	crd       CRDRenderer
+	engine    ControllerEngine
 	finalizer rresource.Finalizer
 
 	log    logging.Logger
@@ -107,33 +177,20 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	defer cancel()
 
 	p := &v1alpha1.InfrastructurePublication{}
-	if err := r.local.Get(ctx, req.NamespacedName, p); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetPublication)
+	if err := r.local.Get(ctx, req.NamespacedName, p); rresource.IgnoreNotFound(err) != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetPublication)
 	}
-	gk := schema.ParseGroupKind(p.Spec.InfrastructureDefinitionReference.Name)
-	crd := &v1beta1.CustomResourceDefinition{}
-	nn := types.NamespacedName{Name: fmt.Sprintf("%s%s.%s", gk.Kind[:len(gk.Kind)-1], ccrd.PublishedInfrastructureSuffixPlural, gk.Group)}
-	if err := r.remote.Get(ctx, nn, crd); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetCRD)
+	local, err := r.crd.Render(ctx, p)
+	if rresource.IgnoreNotFound(err) != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errRenderCRD)
 	}
-	existing := &v1beta1.CustomResourceDefinition{}
-	if err := r.local.Get(ctx, nn, existing); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errGetCRD)
-	}
-	gvk := schema.GroupVersionKind{
-		Group: crd.Spec.Group,
-		Kind:  crd.Spec.Names.Kind,
-		// TODO(muvaf): Choose the one that is accepted by the api-server.
-		Version: crd.Spec.Versions[len(crd.Spec.Versions)-1].Name,
-	}
+
 	if meta.WasDeleted(p) {
 		p.Status.SetConditions(v1alpha1.Deleting())
 
-		nn := types.NamespacedName{Name: crd.GetName()}
-		if err := r.local.Get(ctx, nn, crd); rresource.IgnoreNotFound(err) != nil {
-			// TODO(muvaf): Error messages could be more helpful if we automate
-			// injection of information about which cluster resource exists.
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), errUpdateStatus)
+		err := r.local.Get(ctx, CRDNameOf(p), local)
+		if rresource.IgnoreNotFound(err) != nil {
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
 		}
 
 		// The CRD has no creation timestamp, or we don't control it. Most
@@ -142,14 +199,14 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// creating it, or that we lost control of it around the same time we
 		// were deleted. In the (presumably exceedingly rare) latter case we'll
 		// orphan the CRD.
-		if !meta.WasCreated(crd) || !metav1.IsControlledBy(crd, p) {
+		if !meta.WasCreated(local) || !metav1.IsControlledBy(local, p) {
 			// It's likely that we've already stopped this controller on a
 			// previous reconcile, but we try again just in case. This is a
 			// no-op if the controller was already stopped.
 			r.engine.Stop(crequirement.ControllerName(p.GetName()))
 
-			if err := r.finalizer.RemoveFinalizer(ctx, crd); err != nil {
-				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+			if err := r.finalizer.RemoveFinalizer(ctx, p); err != nil {
+				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errRemoveFinalizer)
 			}
 
 			// We're all done deleting and have removed our finalizer. There's
@@ -158,9 +215,9 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		}
 
 		l := &kunstructured.UnstructuredList{}
-		l.SetGroupVersionKind(gvk)
+		l.SetGroupVersionKind(GroupVersionKindOf(local))
 		if err := r.local.List(ctx, l); rresource.Ignore(kmeta.IsNoMatchError, err) != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errListCR)
 		}
 
 		// Ensure all the custom resources we defined are gone before stopping
@@ -172,56 +229,60 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 			// being namespaced rather than cluster scoped?
 			for i := range l.Items {
 				if err := r.local.Delete(ctx, &l.Items[i]); rresource.IgnoreNotFound(err) != nil {
-					return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+					return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCR)
 				}
 			}
 
 			// We requeue to confirm that all the custom resources we just
 			// deleted are actually gone. We need to requeue after a tiny wait
 			// because we won't be requeued implicitly when the CRs are deleted.
-			return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+			return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
 		}
 
 		// The controller should be stopped before the deletion of CRD so that
 		// it doesn't crash.
 		r.engine.Stop(crequirement.ControllerName(p.GetName()))
 
-		if err := r.local.Delete(ctx, crd); rresource.IgnoreNotFound(err) != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+		if err := r.local.Delete(ctx, local); rresource.IgnoreNotFound(err) != nil {
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCRD)
 		}
 
 		// We should be requeued implicitly because we're watching the
 		// CustomResourceDefinition that we just deleted, but we requeue after
 		// a tiny wait just in case the CRD isn't gone after the first requeue.
 		p.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
-		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
 	}
 
-	meta.AddOwnerReference(crd, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
-	if err := r.local.Apply(ctx, crd, resource.OverrideGeneratedMetadata); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, local+errApplyCRD)
+	if err := r.finalizer.AddFinalizer(ctx, p); err != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizerPub)
 	}
 
-	if !ccrd.IsEstablished(crd.Status) {
-		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+	meta.AddOwnerReference(local, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
+	if err := r.local.Apply(ctx, local, rresource.MustBeControllableBy(p.GetUID()), resource.OverrideGeneratedMetadata); err != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplyCRD)
+	}
+
+	if !ccrd.IsEstablished(local.Status) {
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
 	}
 	o := kcontroller.Options{Reconciler: requirement.NewReconciler(r.mgr,
 		r.remote,
-		gvk,
+		GroupVersionKindOf(local),
 		requirement.WithLogger(log.WithValues("controller", crequirement.ControllerName(p.GetName()))),
 		requirement.WithRecorder(r.record.WithAnnotations("controller", crequirement.ControllerName(p.GetName()))),
 	)}
 
 	rq := &kunstructured.Unstructured{}
-	rq.SetGroupVersionKind(gvk)
+	rq.SetGroupVersionKind(GroupVersionKindOf(local))
 
 	if err := r.engine.Start(crequirement.ControllerName(p.GetName()), o,
 		controller.For(rq, &handler.EnqueueRequestForObject{}),
 	); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errStartController)
 	}
 
 	p.Status.SetConditions(v1alpha1.Started())
 	p.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, p), local+errUpdateStatus)
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
 }
