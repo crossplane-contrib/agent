@@ -17,14 +17,16 @@ limitations under the License.
 package crd
 
 import (
+	"context"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -40,7 +42,7 @@ var (
 func TestReconcile(t *testing.T) {
 	type args struct {
 		m     manager.Manager
-		local client.Client
+		local resource.ClientApplicator
 		in    *apiextensions.CustomResourceDefinition
 	}
 	type want struct {
@@ -52,28 +54,16 @@ func TestReconcile(t *testing.T) {
 		args   args
 		want   want
 	}{
-		"SuccessfulCreate": {
-			reason: "No error should be returned during initial creation",
+		"SuccessfulApply": {
+			reason: "No error should be returned if everything goes as expected",
 			args: args{
 				m: &fake.Manager{
 					Client: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				},
-				local: &test.MockClient{
-					MockGet:    test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
-					MockCreate: test.NewMockCreateFn(nil),
-				},
-				in: &apiextensions.CustomResourceDefinition{},
-			},
-			want: want{result: reconcile.Result{RequeueAfter: longWait}},
-		},
-		"SuccessfulUpdate": {
-			args: args{
-				m: &fake.Manager{
-					Client: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
-				},
-				local: &test.MockClient{
-					MockGet:    test.NewMockGetFn(nil),
-					MockUpdate: test.NewMockUpdateFn(nil),
+				local: resource.ClientApplicator{
+					Applicator: resource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...resource.ApplyOption) error {
+						return nil
+					}),
 				},
 				in: &apiextensions.CustomResourceDefinition{},
 			},
@@ -96,14 +86,16 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				},
-				local: &test.MockClient{
-					MockGet: test.NewMockGetFn(errBoom),
+				local: resource.ClientApplicator{
+					Applicator: resource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...resource.ApplyOption) error {
+						return errBoom
+					}),
 				},
 				in: &apiextensions.CustomResourceDefinition{},
 			},
 			want: want{
 				result: reconcile.Result{RequeueAfter: longWait},
-				err:    errors.Wrap(errors.Wrap(errBoom, "cannot get object"), local+errApplyCRD),
+				err:    errors.Wrap(errBoom, local+errApplyCRD),
 			},
 		},
 	}

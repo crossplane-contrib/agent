@@ -51,7 +51,11 @@ const (
 
 func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger) error {
 	name := "CustomResourceDefinitions"
-	r := NewReconciler(mgr, localClient, logger)
+	ca := rresource.ClientApplicator{
+		Client:     localClient,
+		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+	}
+	r := NewReconciler(mgr, ca, logger)
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		For(&v1beta1.CustomResourceDefinition{}).
@@ -64,13 +68,10 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 		Complete(r)
 }
 
-func NewReconciler(mgr manager.Manager, localClient client.Client, logger logging.Logger) *Reconciler {
+func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientApplicator, logger logging.Logger) *Reconciler {
 	return &Reconciler{
-		mgr: mgr,
-		local: rresource.ClientApplicator{
-			Client:     localClient,
-			Applicator: rresource.NewAPIUpdatingApplicator(localClient),
-		},
+		mgr:    mgr,
+		local:  localClientApplicator,
 		remote: mgr.GetClient(),
 		log:    logger,
 		// TODO(muvaf): The event recorders are constructed using manager but since
