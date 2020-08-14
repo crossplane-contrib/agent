@@ -68,7 +68,6 @@ func TestReconcile(t *testing.T) {
 	type args struct {
 		m      manager.Manager
 		remote client.Client
-		engine ControllerEngine
 		opts   []ReconcilerOption
 	}
 	type want struct {

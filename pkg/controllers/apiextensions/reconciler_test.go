@@ -72,7 +72,6 @@ func Test_Reconcile(t *testing.T) {
 	type args struct {
 		m     manager.Manager
 		local rresource.ClientApplicator
-		opts  []ReconcilerOption
 	}
 	type want struct {
 		result reconcile.Result

@@ -32,9 +32,6 @@ import (
 )
 
 type Agent struct {
-	period    time.Duration
-	namespace string
-
 	ClusterConfig *rest.Config
 	DefaultConfig *rest.Config
 }

@@ -87,8 +87,6 @@ type Reconciler struct {
 	local  rresource.ClientApplicator
 	remote client.Client
 
-	list []string
-
 	log    logging.Logger
 	record event.Recorder
 }

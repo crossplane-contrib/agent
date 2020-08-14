@@ -36,9 +36,6 @@ import (
 type Setup func(mgr manager.Manager, localClient client.Client, logger logging.Logger) error
 
 type Agent struct {
-	period    time.Duration
-	namespace string
-
 	ClusterConfig *rest.Config
 	DefaultConfig *rest.Config
 }

@@ -29,8 +29,8 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 
-	"github.com/crossplane/agent/cmd/local"
-	"github.com/crossplane/agent/cmd/remote"
+	"github.com/crossplane/agent/cmd/agent/local"
+	"github.com/crossplane/agent/cmd/agent/remote"
 )
 
 func main() {

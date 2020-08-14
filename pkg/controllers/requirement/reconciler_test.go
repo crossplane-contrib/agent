@@ -54,7 +54,6 @@ func TestReconcile(t *testing.T) {
 		m      manager.Manager
 		remote client.Client
 		opts   []ReconcilerOption
-		in     *requirement.Unstructured
 	}
 	type want struct {
 		result reconcile.Result
@@ -311,13 +310,13 @@ func TestReconcile(t *testing.T) {
 				},
 				remote: &test.MockClient{
 					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						switch obj.(type) {
+						switch o := obj.(type) {
 						case *v1.Secret:
 							return errBoom
 						case *unstructured.Unstructured:
 							r := requirement.New()
 							r.SetWriteConnectionSecretToReference(&v1alpha1.LocalSecretReference{Name: "ola"})
-							r.DeepCopyInto(obj.(*unstructured.Unstructured))
+							r.DeepCopyInto(o)
 							return nil
 						}
 						return errBoom
@@ -347,13 +346,13 @@ func TestReconcile(t *testing.T) {
 				},
 				remote: &test.MockClient{
 					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						switch obj.(type) {
+						switch o := obj.(type) {
 						case *v1.Secret:
 							return kerrors.NewNotFound(schema.GroupResource{}, "")
 						case *unstructured.Unstructured:
 							r := requirement.New()
 							r.SetWriteConnectionSecretToReference(&v1alpha1.LocalSecretReference{Name: "ola"})
-							r.DeepCopyInto(obj.(*unstructured.Unstructured))
+							r.DeepCopyInto(o)
 							return nil
 						}
 						return errBoom
@@ -390,13 +389,13 @@ func TestReconcile(t *testing.T) {
 				},
 				remote: &test.MockClient{
 					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						switch obj.(type) {
+						switch o := obj.(type) {
 						case *v1.Secret:
 							return nil
 						case *unstructured.Unstructured:
 							r := requirement.New()
 							r.SetWriteConnectionSecretToReference(&v1alpha1.LocalSecretReference{Name: "ola"})
-							r.DeepCopyInto(obj.(*unstructured.Unstructured))
+							r.DeepCopyInto(o)
 							return nil
 						}
 						return errBoom
