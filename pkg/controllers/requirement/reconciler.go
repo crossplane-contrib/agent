@@ -63,26 +63,31 @@ const (
 	errConvertStatusToLocal    = "cannot convert status of the requirement for the local object"
 )
 
-type ReconcilerOption func(*Reconciler)
-
+// WithLogger specifies how the Reconciler should log messages.
 func WithLogger(l logging.Logger) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.log = l
 	}
 }
 
+// WithRecorder specifies how the Reconciler should record events.
 func WithRecorder(rec event.Recorder) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.record = rec
 	}
 }
 
+// WithFinalizer specifies how the Reconciler should add and remove finalizers.
 func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.finalizer = f
 	}
 }
 
+// ReconcilerOption is used to configure *Reconciler.
+type ReconcilerOption func(*Reconciler)
+
+// NewReconciler returns a new *Reconciler.
 func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.GroupVersionKind, opts ...ReconcilerOption) *Reconciler {
 	ni := func() *requirement.Unstructured { return requirement.New(requirement.WithGroupVersionKind(gvk)) }
 	lc := unstructured.NewClient(mgr.GetClient())
@@ -109,6 +114,8 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 	return r
 }
 
+// Reconciler syncs the given requirement instance from local cluster to remote
+// cluster and fetches its connection secret to local cluster if it's available.
 type Reconciler struct {
 	mgr    ctrl.Manager
 	local  rresource.ClientApplicator
@@ -121,6 +128,7 @@ type Reconciler struct {
 	record event.Recorder
 }
 
+// Reconcile watches the given type and does necessary sync operations.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")

@@ -31,11 +31,13 @@ import (
 	"github.com/crossplane/agent/pkg/controllers/publication"
 )
 
+// Agent configures & starts the manager that will watch the local cluster.
 type Agent struct {
 	ClusterConfig *rest.Config
 	DefaultConfig *rest.Config
 }
 
+// Run adds all controllers and starts the manager that will watch the local cluster.
 func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 	log.Debug("Starting", "sync-period", period.String())
 

@@ -13,19 +13,21 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package publication
 
 import (
 	"fmt"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 )
 
+// CRDNameOf returns the name of the CRD that's created as result of given InfrastructurePublication.
 func CRDNameOf(ip v1alpha1.InfrastructurePublication) types.NamespacedName {
 	gk := schema.ParseGroupKind(ip.Spec.InfrastructureDefinitionReference.Name)
 	if len(gk.Kind) == 0 || len(gk.Group) == 0 {
@@ -37,6 +39,7 @@ func CRDNameOf(ip v1alpha1.InfrastructurePublication) types.NamespacedName {
 	return types.NamespacedName{Name: fmt.Sprintf("%s%s.%s", gk.Kind[:len(gk.Kind)-1], ccrd.PublishedInfrastructureSuffixPlural, gk.Group)}
 }
 
+// GroupVersionKindOf returns the served GroupVersionKind of given CRD.
 func GroupVersionKindOf(crd v1beta1.CustomResourceDefinition) schema.GroupVersionKind {
 	servedVersion := crd.Spec.Version
 	for _, v := range crd.Spec.Versions {

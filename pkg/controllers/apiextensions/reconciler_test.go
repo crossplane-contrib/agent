@@ -21,24 +21,19 @@ import (
 	"fmt"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
-
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
-
 	"github.com/google/go-cmp/cmp"
-
-	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/pkg/errors"
-
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
 var (
@@ -319,7 +314,7 @@ func Test_Reconcile(t *testing.T) {
 			r := NewReconciler(tc.args.m, tc.args.local,
 				WithGetItemsFn(gi),
 				WithNewInstanceFn(ni),
-				WithNewListFn(nl),
+				WithNewObjectListFn(nl),
 				WithCRDName(compositionCRDName))
 			got, err := r.Reconcile(reconcile.Request{})
 

@@ -19,7 +19,6 @@ package remote
 import (
 	"time"
 
-	capiextensions "github.com/crossplane/crossplane/apis/apiextensions"
 	"github.com/pkg/errors"
 	crds "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/client-go/rest"
@@ -28,18 +27,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	capiextensions "github.com/crossplane/crossplane/apis/apiextensions"
 
 	"github.com/crossplane/agent/pkg/controllers/apiextensions"
 	"github.com/crossplane/agent/pkg/controllers/crd"
 )
 
-type Setup func(mgr manager.Manager, localClient client.Client, logger logging.Logger) error
-
+// Agent configures & starts the manager that is watching the remote cluster.
 type Agent struct {
 	ClusterConfig *rest.Config
 	DefaultConfig *rest.Config
 }
 
+// Run adds all controllers and starts the manager that watches the remote cluster.
 func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 	log.Debug("Starting", "sync-period", period.String())
 
@@ -61,14 +61,14 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 		return errors.Wrap(err, "Cannot add Crossplane apiextensions API to scheme")
 	}
 
-	for _, setup := range []Setup{
+	for _, setup := range []func(mgr manager.Manager, localClient client.Client, logger logging.Logger) error{
 		crd.Setup,
 		apiextensions.SetupInfraPubSync,
 		apiextensions.SetupInfraDefSync,
 		apiextensions.SetupCompositionSync,
 	} {
 		if err := setup(mgr, localClient, log); err != nil {
-			return err
+			return errors.Wrap(err, "cannot setup the controller")
 		}
 	}
 

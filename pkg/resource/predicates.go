@@ -21,14 +21,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
+// NewNameFilter returns a new *NameFilter that uses the given list.
 func NewNameFilter(list []types.NamespacedName) *NameFilter {
 	return &NameFilter{list: list}
 }
 
+// NameFilter allows only the objects whose name appears in the list. This applies
+// to all kinds of events that a controller can receive.
 type NameFilter struct {
 	list []types.NamespacedName
 }
 
+// Create returns true if the NamespacedName of the object of the event is allowed
+// to be reconciled.
 func (f *NameFilter) Create(e event.CreateEvent) bool {
 	for _, nn := range f.list {
 		if e.Meta.GetName() == nn.Name && e.Meta.GetNamespace() == nn.Namespace {
@@ -38,6 +43,8 @@ func (f *NameFilter) Create(e event.CreateEvent) bool {
 	return false
 }
 
+// Update returns true if the NamespacedName of the object of the event is allowed
+// to be reconciled.
 func (f *NameFilter) Update(e event.UpdateEvent) bool {
 	for _, nn := range f.list {
 		if e.MetaNew.GetName() == nn.Name && e.MetaNew.GetNamespace() == nn.Namespace {
@@ -47,6 +54,8 @@ func (f *NameFilter) Update(e event.UpdateEvent) bool {
 	return false
 }
 
+// Delete returns true if the NamespacedName of the object of the event is allowed
+// to be reconciled.
 func (f *NameFilter) Delete(e event.DeleteEvent) bool {
 	for _, nn := range f.list {
 		if e.Meta.GetName() == nn.Name && e.Meta.GetNamespace() == nn.Namespace {
@@ -56,6 +65,8 @@ func (f *NameFilter) Delete(e event.DeleteEvent) bool {
 	return false
 }
 
+// Generic returns true if the NamespacedName of the object of the event is allowed
+// to be reconciled.
 func (f *NameFilter) Generic(e event.GenericEvent) bool {
 	for _, nn := range f.list {
 		if e.Meta.GetName() == nn.Name && e.Meta.GetNamespace() == nn.Namespace {

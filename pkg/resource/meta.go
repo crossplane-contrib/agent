@@ -21,13 +21,13 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // OverrideGeneratedMetadata makes it possible to use "to" object to correspond to the
@@ -51,6 +51,7 @@ func OverrideGeneratedMetadata(_ context.Context, from, to runtime.Object) error
 	return nil
 }
 
+// OverrideInputMetadata copies the user-filled metadata from "from" object to "to".
 func OverrideInputMetadata(from, to metav1.Object) {
 	to.SetName(from.GetName())
 	to.SetNamespace(from.GetNamespace())

@@ -13,16 +13,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package apiextensions
 
 import (
-	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+
+	"github.com/crossplane/crossplane-runtime/pkg/logging"
+	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
 const (
@@ -33,7 +35,8 @@ const (
 	compositionCRDName = "compositions.apiextensions.crossplane.io"
 )
 
-// SetupInfraDefSync adds a controller that syncs InfrastructureDefinitions.
+// SetupInfraDefSync adds a controller that syncs InfrastructureDefinitions from
+// remote cluster to local cluster.
 func SetupInfraDefSync(mgr ctrl.Manager, localClient client.Client, log logging.Logger) error {
 	name := "InfrastructureDefinitions"
 
@@ -58,7 +61,7 @@ func SetupInfraDefSync(mgr ctrl.Manager, localClient client.Client, log logging.
 		WithLogger(log.WithValues("controller", name)),
 		WithCRDName(infraDefCRDName),
 		WithNewInstanceFn(ni),
-		WithNewListFn(nl),
+		WithNewObjectListFn(nl),
 		WithGetItemsFn(gi))
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -68,7 +71,8 @@ func SetupInfraDefSync(mgr ctrl.Manager, localClient client.Client, log logging.
 		Complete(r)
 }
 
-// SetupInfraPubSync adds a controller that reconciles ApplicationConfigurations.
+// SetupInfraPubSync adds a controller that syncs InfrastructurePublications from
+// remote cluster to local cluster.
 func SetupInfraPubSync(mgr ctrl.Manager, localClient client.Client, log logging.Logger) error {
 	name := "InfrastructurePublications"
 
@@ -93,7 +97,7 @@ func SetupInfraPubSync(mgr ctrl.Manager, localClient client.Client, log logging.
 		WithLogger(log.WithValues("controller", name)),
 		WithCRDName(infraPubCRDName),
 		WithNewInstanceFn(ni),
-		WithNewListFn(nl),
+		WithNewObjectListFn(nl),
 		WithGetItemsFn(gi))
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -103,7 +107,8 @@ func SetupInfraPubSync(mgr ctrl.Manager, localClient client.Client, log logging.
 		Complete(r)
 }
 
-// SetupCompositionSync adds a controller that syncs Compositions.
+// SetupCompositionSync adds a controller that syncs Compositions from
+// remote cluster to local cluster.
 func SetupCompositionSync(mgr ctrl.Manager, localClient client.Client, log logging.Logger) error {
 	name := "Compositions"
 
@@ -128,7 +133,7 @@ func SetupCompositionSync(mgr ctrl.Manager, localClient client.Client, log loggi
 		WithLogger(log.WithValues("controller", name)),
 		WithCRDName(compositionCRDName),
 		WithNewInstanceFn(ni),
-		WithNewListFn(nl),
+		WithNewObjectListFn(nl),
 		WithGetItemsFn(gi))
 
 	return ctrl.NewControllerManagedBy(mgr).

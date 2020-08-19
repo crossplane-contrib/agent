@@ -55,25 +55,31 @@ const (
 // ReconcilerOption is used to configure the Reconciler.
 type ReconcilerOption func(*Reconciler)
 
-func WithNewListFn(f func() runtime.Object) ReconcilerOption {
+// WithNewObjectListFn specifies the function to be used to initialize an empty
+// list of objects whose type is being reconciled by this Reconciler.
+func WithNewObjectListFn(f func() runtime.Object) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.newObjectList = f
 	}
 }
 
+// WithNewInstanceFn specifies the function to be used to initialize an empty
+// object whose type is being reconciled by this Reconciler.
 func WithNewInstanceFn(f func() rresource.Object) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.newObject = f
 	}
 }
 
+// WithGetItemsFn specifies the function that will be used to retrieve an array
+// of objects from the object list.
 func WithGetItemsFn(f func(l runtime.Object) []rresource.Object) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.getItems = f
 	}
 }
 
-// WithCRDName specifies the name of the corresponding CRD that has to be made
+// WithCRDName specifies the name of the corresponding CRD object that has to be
 // available in the local cluster.
 func WithCRDName(name string) ReconcilerOption {
 	return func(r *Reconciler) {
@@ -95,6 +101,7 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 	}
 }
 
+// NewReconciler returns a new *Reconciler object.
 func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientApplicator, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		mgr:    mgr,
@@ -110,8 +117,9 @@ func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientAp
 	return r
 }
 
-// Reconciler syncs the instances of given CRD in remote->local direction. It
-// supports only cluster-scoped resources.
+// Reconciler syncs the Custom Resources of given CustomResourceDefinition from
+// remote cluster to local cluster. It works only with cluster-scoped resources and
+// always overrides the changes made to those Custom Resources in the local cluster.
 type Reconciler struct {
 	remote client.Client
 	local  rresource.ClientApplicator
@@ -126,6 +134,7 @@ type Reconciler struct {
 	record event.Recorder
 }
 
+// Reconcile syncs the cluster-scoped instance of the type in remote->local direction.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")

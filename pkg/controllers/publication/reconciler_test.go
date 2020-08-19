@@ -20,30 +20,22 @@ import (
 	"context"
 	"testing"
 
-	kunstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
-
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
-
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
-	"github.com/pkg/errors"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/google/go-cmp/cmp"
-
-	"github.com/crossplane/crossplane-runtime/pkg/controller"
+	"github.com/pkg/errors"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kunstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
-
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/crossplane/crossplane-runtime/pkg/controller"
+	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
 var (
@@ -145,8 +137,7 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch o := obj.(type) {
-							case *v1alpha1.InfrastructurePublication:
+							if o, ok := obj.(*v1alpha1.InfrastructurePublication); ok {
 								ip := &v1alpha1.InfrastructurePublication{
 									ObjectMeta: metav1.ObjectMeta{
 										DeletionTimestamp: &now,
@@ -180,8 +171,7 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch o := obj.(type) {
-							case *v1alpha1.InfrastructurePublication:
+							if o, ok := obj.(*v1alpha1.InfrastructurePublication); ok {
 								ip := &v1alpha1.InfrastructurePublication{
 									ObjectMeta: metav1.ObjectMeta{
 										DeletionTimestamp: &now,
@@ -214,8 +204,7 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch o := obj.(type) {
-							case *v1alpha1.InfrastructurePublication:
+							if o, ok := obj.(*v1alpha1.InfrastructurePublication); ok {
 								ip := &v1alpha1.InfrastructurePublication{
 									ObjectMeta: metav1.ObjectMeta{
 										DeletionTimestamp: &now,
@@ -256,8 +245,7 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch o := obj.(type) {
-							case *v1alpha1.InfrastructurePublication:
+							if o, ok := obj.(*v1alpha1.InfrastructurePublication); ok {
 								ip := &v1alpha1.InfrastructurePublication{
 									ObjectMeta: metav1.ObjectMeta{
 										DeletionTimestamp: &now,
@@ -303,8 +291,7 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch o := obj.(type) {
-							case *v1alpha1.InfrastructurePublication:
+							if o, ok := obj.(*v1alpha1.InfrastructurePublication); ok {
 								ip := &v1alpha1.InfrastructurePublication{
 									ObjectMeta: metav1.ObjectMeta{
 										DeletionTimestamp: &now,
@@ -350,8 +337,7 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch o := obj.(type) {
-							case *v1alpha1.InfrastructurePublication:
+							if o, ok := obj.(*v1alpha1.InfrastructurePublication); ok {
 								ip := &v1alpha1.InfrastructurePublication{
 									ObjectMeta: metav1.ObjectMeta{
 										DeletionTimestamp: &now,
@@ -393,8 +379,7 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch o := obj.(type) {
-							case *v1alpha1.InfrastructurePublication:
+							if o, ok := obj.(*v1alpha1.InfrastructurePublication); ok {
 								ip := &v1alpha1.InfrastructurePublication{
 									ObjectMeta: metav1.ObjectMeta{
 										DeletionTimestamp: &now,

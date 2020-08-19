@@ -49,6 +49,18 @@ const (
 	errApplyCRD = "cannot apply custom resource definition"
 )
 
+// NOTE(muvaf): CRDs could also be synced with apiextensions.Reconciler which syncs
+// instances of InfraPubs/InfraDefs/Compositions. However, that controller first
+// checks CRDs of those types and also assumes that it's the sole owner of that
+// type and tries to make 1-to-1 match between remote and local cluster. In CRDs
+// case, we are not the sole owner of all CRDs, i.e. we can't just delete a CRD
+// in local cluster just because it doesn't exist in the remote cluster.
+// The reconciler could be made configurable to handle both of these logics differently,
+// but that's pretty much all the logic exists anyway. So, we keep the CRD reconciler
+// separate and lean here.
+
+// Setup adds a controller that watches CustomResourceDefinitions in the remote
+// cluster and replicates them in the local cluster.
 func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger) error {
 	name := "CustomResourceDefinitions"
 	ca := rresource.ClientApplicator{
@@ -68,6 +80,7 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 		Complete(r)
 }
 
+// NewReconciler returns a new *Reconciler.
 func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientApplicator, logger logging.Logger) *Reconciler {
 	return &Reconciler{
 		mgr:    mgr,
@@ -82,6 +95,9 @@ func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientAp
 	}
 }
 
+// Reconciler syncs CRDs in the remote cluster to the local cluster, overrides
+// the existing ones in the local cluster. It's advised to use this together with
+// an EventFilter to filter only the CRDs you'd like to be synced.
 type Reconciler struct {
 	mgr    ctrl.Manager
 	local  rresource.ClientApplicator
@@ -91,6 +107,7 @@ type Reconciler struct {
 	record event.Recorder
 }
 
+// Reconcile fetches the CRD from remote cluster and applies it in the local cluster.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")

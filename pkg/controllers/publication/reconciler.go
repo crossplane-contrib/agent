@@ -70,6 +70,8 @@ const (
 	errAddFinalizerPub = "cannot add finalizer to infrastructurepublication"
 )
 
+// Setup adds a controller that will reconcile InfrastructurePublications in the
+// local cluster and create CRDs & controllers that will reconcile those new types.
 func Setup(mgr manager.Manager, remoteClient client.Client, logger logging.Logger) error {
 	name := "RequirementCRD"
 	r := NewReconciler(mgr, remoteClient,
@@ -90,7 +92,7 @@ func WithControllerEngine(c ControllerEngine) ReconcilerOption {
 	}
 }
 
-// WithCRDRenderer specifies how the Reconciler should add and remove finalizers.
+// WithFinalizer specifies how the Reconciler should add and remove finalizers.
 func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.finalizer = f
@@ -104,7 +106,8 @@ func WithCRDRenderer(re CRDRenderer) ReconcilerOption {
 	}
 }
 
-// WithLogger specifies how the Reconciler should log messages.
+// WithLocalApplicator specifies what Applicator in local cluster Reconciler
+// should use.
 func WithLocalApplicator(a rresource.Applicator) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.local.Applicator = a
@@ -125,8 +128,10 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 	}
 }
 
+// ReconcilerOption is used to configure *Reconciler.
 type ReconcilerOption func(*Reconciler)
 
+// NewReconciler returns a new *Reconciler.
 func NewReconciler(mgr manager.Manager, remoteClient client.Client, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		mgr: mgr,
@@ -147,15 +152,22 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, opts ...Reco
 	return r
 }
 
+// ControllerEngine can be satisfied with objects that can start and stop a controller.
 type ControllerEngine interface {
 	Start(name string, o kcontroller.Options, w ...controller.Watch) error
 	Stop(name string)
 }
 
+// CRDRenderer can be satisfied with objects that can return a CRD with InfrastructurePublication
+// information.
 type CRDRenderer interface {
 	Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
 }
 
+// Reconciler watches the InfrastructurePublications in the cluster and creates a
+// CRD for each of them with spec that is rendered via supplied CRDRenderer. Then
+// it creates a controller for each new type that will sync the instances of that
+// type from local cluster to remote cluster.
 type Reconciler struct {
 	mgr    ctrl.Manager
 	local  rresource.ClientApplicator
@@ -169,6 +181,8 @@ type Reconciler struct {
 	record event.Recorder
 }
 
+// Reconcile reconciles InfrastructurePublication and does the necessary operations
+// to bootstrap reconciliation of that new type defined by InfrastructurePublication.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")
