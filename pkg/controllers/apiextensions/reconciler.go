@@ -135,7 +135,7 @@ type Reconciler struct {
 }
 
 // Reconcile syncs the cluster-scoped instance of the type in remote->local direction.
-func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) { // nolint:gocyclo
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")
 

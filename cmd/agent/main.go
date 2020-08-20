@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"gopkg.in/alecthomas/kingpin.v2"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -43,10 +42,8 @@ func main() {
 	csa := s.Flag("cluster-kubeconfig", "File path of the kubeconfig of ServiceAccount to be used to get cluster-scoped resources like CRDs.").Envar("CLUSTER_KUBECONFIG").String()
 	dsa := s.Flag("default-kubeconfig", "File path of the  kubeconfig of ServiceAccount to be used for all namespaces that do not have override annotations.").Envar("DEFAULT_KUBECONFIG").String()
 	mode := s.Flag("mode", "The mode of operation to decide whether you would like to run the controllers that watch the local cluster or the remote cluster.").Enum("local", "remote")
-	cmd := kingpin.MustParse(app.Parse(os.Args[1:]))
-	if cmd != s.FullCommand() {
-		kingpin.FatalUsage("unknown command %s", cmd)
-	}
+
+	kingpin.MustParse(app.Parse(os.Args[1:]))
 	zl := zap.New(zap.UseDevMode(*debug))
 	if *debug {
 		// The controller-runtime runs with a no-op logger by default. It is
@@ -54,23 +51,13 @@ func main() {
 		// logger when we're running in debug mode.
 		ctrl.SetLogger(zl)
 	}
-	switch {
-	case *csa == "" && *dsa != "":
-		*csa = *dsa
-	case *csa == "" && *dsa == "":
-		kingpin.FatalUsage("cannot get cluster-scoped resources from Crossplane if neither cluster config nor default config is given")
+	defaultConfig, err := clientcmd.BuildConfigFromFlags("", *dsa)
+	if err != nil {
+		kingpin.FatalUsage("could not parse default kubeconfig %s", *csa)
 	}
-
 	clusterConfig, err := clientcmd.BuildConfigFromFlags("", *csa)
 	if err != nil {
 		kingpin.FatalUsage("could not parse cluster kubeconfig %s", *csa)
-	}
-	var defaultConfig *rest.Config
-	if *dsa != "" {
-		defaultConfig, err = clientcmd.BuildConfigFromFlags("", *dsa)
-		if err != nil {
-			kingpin.FatalUsage("could not parse default kubeconfig %s", *csa)
-		}
 	}
 	duration, _ := time.ParseDuration("1h")
 	switch *mode {

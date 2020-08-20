@@ -20,20 +20,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
-
+	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/pkg/errors"
-
-	"github.com/google/go-cmp/cmp"
-
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/test"
-	"k8s.io/apimachinery/pkg/runtime"
-
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/crossplane/crossplane-runtime/pkg/test"
 )
 
 var (

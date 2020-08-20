@@ -182,7 +182,7 @@ type Reconciler struct {
 
 // Reconcile reconciles InfrastructurePublication and does the necessary operations
 // to bootstrap reconciliation of that new type defined by InfrastructurePublication.
-func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) {
+func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) { // nolint:gocyclo
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")
 

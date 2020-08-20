@@ -188,5 +188,5 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, errPropagate)
 	}
 
-	return reconcile.Result{RequeueAfter: longWait}, r.local.Status().Update(ctx, local)
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, local), localPrefix+errStatusUpdateRequirement)
 }

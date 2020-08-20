@@ -30,7 +30,7 @@ func SanitizedDeepCopyObject(in runtime.Object) resource.Object {
 	out, _ := in.DeepCopyObject().(resource.Object)
 	out.SetResourceVersion("")
 	out.SetUID("")
-	out.SetCreationTimestamp(metav1.Unix(0, 0))
+	out.SetCreationTimestamp(metav1.Time{})
 	out.SetSelfLink("")
 	out.SetOwnerReferences(nil)
 	out.SetManagedFields(nil)
