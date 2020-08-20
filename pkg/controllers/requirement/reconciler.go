@@ -60,7 +60,6 @@ const (
 	errAddFinalizer            = "cannot add finalizer"
 	errGetSecret               = "cannot get secret"
 	errApplySecret             = "cannot apply secret"
-	errConvertStatusToLocal    = "cannot convert status of the requirement for the local object"
 )
 
 // WithLogger specifies how the Reconciler should log messages.
@@ -105,13 +104,26 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 		newInstance: ni,
 		log:         logging.NewNopLogger(),
 		finalizer:   rresource.NewAPIFinalizer(lc, finalizer),
-		record:      event.NewNopRecorder(),
+		// NOTE(muvaf): Late init should be done first to not override existing
+		// generated fields in the remote object such as resourceRef.
+		requirement: ConfiguratorChain([]Configurator{
+			NewMetadataPropagator(),
+			NewLateInitializer(),
+			NewSpecPropagator(),
+			NewStatusConfigurator(),
+		}),
+		record: event.NewNopRecorder(),
 	}
 
 	for _, f := range opts {
 		f(r)
 	}
 	return r
+}
+
+// Configurator is used configure local and remote objects.
+type Configurator interface {
+	Configure(local, remote *requirement.Unstructured) error
 }
 
 // Reconciler syncs the given requirement instance from local cluster to remote
@@ -122,7 +134,9 @@ type Reconciler struct {
 	remote rresource.ClientApplicator
 
 	newInstance func() *requirement.Unstructured
+
 	finalizer   rresource.Finalizer
+	requirement Configurator
 
 	log    logging.Logger
 	record event.Recorder
@@ -165,25 +179,17 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizer)
 	}
 
-	// todo: configurator here.
 	// Update the remote object with latest desired state.
-	resource.OverrideInputMetadata(local, remote)
-	resource.EqualizeRequirementSpec(local, remote)
+	if err := r.requirement.Configure(local, remote); err != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errApplyRequirement)
+	}
 	if err := r.remote.Apply(ctx, remote); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errApplyRequirement)
 	}
-	// TODO(muvaf): Update local object only if it's changed after late-init.
-	if err := r.local.Update(ctx, local); err != nil {
+	if err := r.local.Apply(ctx, local); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errUpdateRequirement)
 	}
 
-	// Update the local object with latest observation.
-	if err := resource.PropagateStatus(remote, local); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, errConvertStatusToLocal)
-	}
-	if err := r.local.Status().Update(ctx, local); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errStatusUpdateRequirement)
-	}
 	if local.GetWriteConnectionSecretToReference() == nil {
 		return reconcile.Result{RequeueAfter: longWait}, nil
 	}
