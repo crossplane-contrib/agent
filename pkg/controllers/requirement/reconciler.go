@@ -21,10 +21,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -36,8 +34,6 @@ import (
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
-
-	"github.com/crossplane/agent/pkg/resource"
 )
 
 const (
@@ -54,6 +50,7 @@ const (
 	errGetRequirement          = "cannot get requirement"
 	errDeleteRequirement       = "cannot delete requirement"
 	errApplyRequirement        = "cannot apply requirement"
+	errPropagate               = "cannot run propagator"
 	errUpdateRequirement       = "cannot update requirement"
 	errStatusUpdateRequirement = "cannot update status of requirement"
 	errRemoveFinalizer         = "cannot remove finalizer"
@@ -90,17 +87,18 @@ type ReconcilerOption func(*Reconciler)
 func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.GroupVersionKind, opts ...ReconcilerOption) *Reconciler {
 	ni := func() *requirement.Unstructured { return requirement.New(requirement.WithGroupVersionKind(gvk)) }
 	lc := unstructured.NewClient(mgr.GetClient())
+	lca := rresource.ClientApplicator{
+		Client:     lc,
+		Applicator: rresource.NewAPIPatchingApplicator(lc),
+	}
 	rc := unstructured.NewClient(remoteClient)
 	rca := rresource.ClientApplicator{
 		Client:     rc,
 		Applicator: rresource.NewAPIPatchingApplicator(rc),
 	}
 	r := &Reconciler{
-		mgr: mgr,
-		local: rresource.ClientApplicator{
-			Client:     lc,
-			Applicator: rresource.NewAPIPatchingApplicator(lc),
-		},
+		mgr:         mgr,
+		local:       lca,
 		remote:      rca,
 		newInstance: ni,
 		log:         logging.NewNopLogger(),
@@ -109,10 +107,8 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 			NewSpecPropagator(rca),
 			NewLateInitializer(lc),
 			NewStatusPropagator(lc),
+			NewConnectionSecretPropagator(lca, rca),
 		),
-		// NOTE(muvaf): Late init should be done first to not override existing
-		// generated fields in the remote object such as resourceRef.
-
 		record: event.NewNopRecorder(),
 	}
 
@@ -181,33 +177,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	if err := r.requirement.Propagate(ctx, local, remote); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errApplyRequirement)
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errPropagate)
 	}
 
-	if local.GetWriteConnectionSecretToReference() == nil {
-		return reconcile.Result{RequeueAfter: longWait}, nil
-	}
-
-	// Update the connection secret.
-	rs := &v1.Secret{}
-	rnn := types.NamespacedName{
-		Name:      remote.GetWriteConnectionSecretToReference().Name,
-		Namespace: remote.GetNamespace(),
-	}
-	err = r.remote.Get(ctx, rnn, rs)
-	if rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errGetSecret)
-	}
-	if kerrors.IsNotFound(err) {
-		// TODO(muvaf): Set condition to say waiting for secret.
-		return reconcile.Result{RequeueAfter: shortWait}, nil
-	}
-	ls := resource.SanitizedDeepCopyObject(rs)
-	ls.SetName(local.GetWriteConnectionSecretToReference().Name)
-	ls.SetNamespace(local.GetNamespace())
-	meta.AddOwnerReference(ls, meta.AsController(meta.ReferenceTo(local, local.GroupVersionKind())))
-	if err := r.local.Apply(ctx, ls); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplySecret)
-	}
-	return reconcile.Result{RequeueAfter: longWait}, nil
+	return reconcile.Result{RequeueAfter: longWait}, r.local.Status().Update(ctx, local)
 }

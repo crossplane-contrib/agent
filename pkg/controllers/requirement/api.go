@@ -19,13 +19,21 @@ package requirement
 import (
 	"context"
 
+	"github.com/pkg/errors"
+	v1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+
 	"k8s.io/apimachinery/pkg/util/json"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/pkg/meta"
+	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
+
+	"github.com/crossplane/agent/pkg/resource"
 )
 
 // NewPropagatorChain returns a new PropagatorChain.
@@ -47,17 +55,17 @@ func (pp PropagatorChain) Propagate(ctx context.Context, local, remote *requirem
 }
 
 // NewSpecPropagator returns a new SpecPropagator.
-func NewSpecPropagator(kube resource.ClientApplicator) *SpecPropagator {
+func NewSpecPropagator(kube rresource.ClientApplicator) *SpecPropagator {
 	return &SpecPropagator{remoteClient: kube}
 }
 
 // SpecPropagator blindly propagates all spec fields of "from" object to
 // "to" object.
 type SpecPropagator struct {
-	remoteClient resource.ClientApplicator
+	remoteClient rresource.ClientApplicator
 }
 
-// Configure copies spec from one object to the other.
+// Propagate copies spec from one object to the other.
 func (sp *SpecPropagator) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
 	remote.SetName(local.GetName())
 	remote.SetNamespace(local.GetNamespace())
@@ -84,7 +92,7 @@ type LateInitializer struct {
 	localClient client.Client
 }
 
-// Configure copies the values from observed to desired if that field is empty in
+// Propagate copies the values from observed to desired if that field is empty in
 // desired object.
 func (li *LateInitializer) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
 	// We fill up the missing pieces in our desired state by late initializing.
@@ -114,11 +122,11 @@ type StatusPropagator struct {
 	localClient client.Client
 }
 
-// Configure copies the status of remote object into local object.
+// Propagate copies the status of remote object into local object.
 func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
 	status, err := fieldpath.Pave(remote.GetUnstructured().UnstructuredContent()).GetValue("status")
 	if err != nil {
-		return resource.Ignore(fieldpath.IsNotFound, err)
+		return rresource.Ignore(fieldpath.IsNotFound, err)
 	}
 	statusJSON, err := json.Marshal(status)
 	if err != nil {
@@ -131,4 +139,45 @@ func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *requir
 	local.SetConditions(conditions.Conditions...)
 	// TODO(muvaf): Need to propagate other fields as well.
 	return sp.localClient.Status().Update(ctx, local)
+}
+
+// NewConnectionSecretPropagator returns a new *ConnectionSecretPropagator.
+func NewConnectionSecretPropagator(local, remote rresource.ClientApplicator) *ConnectionSecretPropagator {
+	return &ConnectionSecretPropagator{localClient: local, remoteClient: remote}
+}
+
+// ConnectionSecretPropagator fetches the connection secret from the remote cluster
+// and applies it in the local cluster.
+type ConnectionSecretPropagator struct {
+	localClient  rresource.ClientApplicator
+	remoteClient rresource.ClientApplicator
+}
+
+// Propagate propagates the connection secret from remote cluster to local cluster.
+func (csp *ConnectionSecretPropagator) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+	if local.GetWriteConnectionSecretToReference() == nil || remote.GetWriteConnectionSecretToReference() == nil {
+		return nil
+	}
+	// Update the connection secret.
+	rs := &v1.Secret{}
+	rnn := types.NamespacedName{
+		Name:      remote.GetWriteConnectionSecretToReference().Name,
+		Namespace: remote.GetNamespace(),
+	}
+	err := csp.remoteClient.Get(ctx, rnn, rs)
+	if rresource.IgnoreNotFound(err) != nil {
+		return errors.Wrap(err, remotePrefix+errGetSecret)
+	}
+	if kerrors.IsNotFound(err) {
+		// TODO(muvaf): Set condition to say waiting for secret.
+		return nil
+	}
+	ls := resource.SanitizedDeepCopyObject(rs)
+	ls.SetName(local.GetWriteConnectionSecretToReference().Name)
+	ls.SetNamespace(local.GetNamespace())
+	meta.AddOwnerReference(ls, meta.AsController(meta.ReferenceTo(local, local.GroupVersionKind())))
+	if err := csp.localClient.Apply(ctx, ls); err != nil {
+		return errors.Wrap(err, localPrefix+errApplySecret)
+	}
+	return nil
 }
