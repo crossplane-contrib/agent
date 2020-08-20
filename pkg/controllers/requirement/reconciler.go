@@ -80,6 +80,14 @@ func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
 	}
 }
 
+// WithPropagator specifies how the Reconciler should propagate values and objects
+// between clusters.
+func WithPropagator(p Propagator) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.requirement = p
+	}
+}
+
 // ReconcilerOption is used to configure *Reconciler.
 type ReconcilerOption func(*Reconciler)
 
@@ -106,7 +114,7 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 		requirement: NewPropagatorChain(
 			NewSpecPropagator(rca),
 			NewLateInitializer(lc),
-			NewStatusPropagator(lc),
+			NewStatusPropagator(),
 			NewConnectionSecretPropagator(lca, rca),
 		),
 		record: event.NewNopRecorder(),
@@ -177,7 +185,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	if err := r.requirement.Propagate(ctx, local, remote); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errPropagate)
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, errPropagate)
 	}
 
 	return reconcile.Result{RequeueAfter: longWait}, r.local.Status().Update(ctx, local)

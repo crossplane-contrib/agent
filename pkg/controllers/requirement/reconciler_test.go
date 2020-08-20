@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
-	v1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -32,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
@@ -199,213 +197,45 @@ func TestReconcile(t *testing.T) {
 				err:    errors.Wrap(errBoom, localPrefix+errAddFinalizer),
 			},
 		},
-		"RemoteApplyFailed": {
-			reason: "An error should be returned if remote requirement cannot be applied",
+		"PropagatorFailed": {
+			reason: "An error should be returned if propagator fails",
 			args: args{
 				m: &fake.Manager{
 					Client: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				},
-				remote: &test.MockClient{
-					MockGet:    test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
-					MockCreate: test.NewMockCreateFn(errBoom),
-				},
+				remote: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				opts: []ReconcilerOption{
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
+					WithPropagator(PropagateFn(func(_ context.Context, _, _ *requirement.Unstructured) error {
+						return errBoom
+					})),
 				},
 			},
 			want: want{
 				result: reconcile.Result{RequeueAfter: shortWait},
-				err:    errors.Wrap(errors.Wrap(errBoom, "cannot create object"), remotePrefix+errApplyRequirement),
+				err:    errors.Wrap(errBoom, errPropagate),
 			},
 		},
-		"LocalUpdateFailed": {
-			reason: "An error should be returned if local requirement cannot be updated with late-inited params",
+		"Successful": {
+			reason: "An error should be returned if propagator fails",
 			args: args{
 				m: &fake.Manager{
-					Client: &test.MockClient{
-						MockGet:    test.NewMockGetFn(nil),
-						MockUpdate: test.NewMockUpdateFn(errBoom),
-					},
+					Client: &test.MockClient{MockGet: test.NewMockGetFn(nil), MockStatusUpdate: test.NewMockStatusUpdateFn(nil)},
 				},
-				remote: &test.MockClient{
-					MockGet:    test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
-					MockCreate: test.NewMockCreateFn(nil),
-				},
+				remote: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				opts: []ReconcilerOption{
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-				},
-			},
-			want: want{
-				result: reconcile.Result{RequeueAfter: shortWait},
-				err:    errors.Wrap(errBoom, localPrefix+errUpdateRequirement),
-			},
-		},
-		"LocalStatusUpdateFailed": {
-			reason: "An error should be returned if status of local requirement cannot be updated",
-			args: args{
-				m: &fake.Manager{
-					Client: &test.MockClient{
-						MockGet:          test.NewMockGetFn(nil),
-						MockUpdate:       test.NewMockUpdateFn(nil),
-						MockStatusUpdate: test.NewMockStatusUpdateFn(errBoom),
-					},
-				},
-				remote: &test.MockClient{
-					MockGet:    test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
-					MockCreate: test.NewMockCreateFn(nil),
-				},
-				opts: []ReconcilerOption{
-					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
+					WithPropagator(PropagateFn(func(_ context.Context, _, _ *requirement.Unstructured) error {
 						return nil
-					}}),
-				},
-			},
-			want: want{
-				result: reconcile.Result{RequeueAfter: shortWait},
-				err:    errors.Wrap(errBoom, localPrefix+errStatusUpdateRequirement),
-			},
-		},
-		"SuccessfulWithNoSecretRef": {
-			reason: "No error should be returned if requirement reconciles and does not have a connection secret",
-			args: args{
-				m: &fake.Manager{
-					Client: &test.MockClient{
-						MockGet:          test.NewMockGetFn(nil),
-						MockUpdate:       test.NewMockUpdateFn(nil),
-						MockStatusUpdate: test.NewMockStatusUpdateFn(nil),
-					},
-				},
-				remote: &test.MockClient{
-					MockGet:    test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
-					MockCreate: test.NewMockCreateFn(nil),
-				},
-				opts: []ReconcilerOption{
-					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
-						return nil
-					}}),
+					})),
 				},
 			},
 			want: want{
 				result: reconcile.Result{RequeueAfter: longWait},
-			},
-		},
-		"RemoteGetSecretFailed": {
-			reason: "The error should be returned if connection secret in the remote cannot be fetched",
-			args: args{
-				m: &fake.Manager{
-					Client: &test.MockClient{
-						MockGet:          test.NewMockGetFn(nil),
-						MockUpdate:       test.NewMockUpdateFn(nil),
-						MockStatusUpdate: test.NewMockStatusUpdateFn(nil),
-					},
-				},
-				remote: &test.MockClient{
-					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						switch o := obj.(type) {
-						case *v1.Secret:
-							return errBoom
-						case *unstructured.Unstructured:
-							r := requirement.New()
-							r.SetWriteConnectionSecretToReference(&v1alpha1.LocalSecretReference{Name: "ola"})
-							r.DeepCopyInto(o)
-							return nil
-						}
-						return errBoom
-					},
-					MockPatch: test.NewMockPatchFn(nil),
-				},
-				opts: []ReconcilerOption{
-					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
-						return nil
-					}}),
-				},
-			},
-			want: want{
-				result: reconcile.Result{RequeueAfter: shortWait},
-				err:    errors.Wrap(errBoom, remotePrefix+errGetSecret),
-			},
-		},
-		"RemoteSecretNotReadyYet": {
-			reason: "No error should be returned if connection secret in the remote is not published yet",
-			args: args{
-				m: &fake.Manager{
-					Client: &test.MockClient{
-						MockGet:          test.NewMockGetFn(nil),
-						MockUpdate:       test.NewMockUpdateFn(nil),
-						MockStatusUpdate: test.NewMockStatusUpdateFn(nil),
-					},
-				},
-				remote: &test.MockClient{
-					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						switch o := obj.(type) {
-						case *v1.Secret:
-							return kerrors.NewNotFound(schema.GroupResource{}, "")
-						case *unstructured.Unstructured:
-							r := requirement.New()
-							r.SetWriteConnectionSecretToReference(&v1alpha1.LocalSecretReference{Name: "ola"})
-							r.DeepCopyInto(o)
-							return nil
-						}
-						return errBoom
-					},
-					MockPatch: test.NewMockPatchFn(nil),
-				},
-				opts: []ReconcilerOption{
-					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
-						return nil
-					}}),
-				},
-			},
-			want: want{
-				result: reconcile.Result{RequeueAfter: shortWait},
-			},
-		},
-		"LocalSecretApplyFailed": {
-			reason: "The error should be returned if connection secret cannot be applied in local",
-			args: args{
-				m: &fake.Manager{
-					Client: &test.MockClient{
-						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							switch obj.(type) {
-							case *v1.Secret:
-								return errBoom
-							case *unstructured.Unstructured:
-								return nil
-							}
-							return nil
-						},
-						MockUpdate:       test.NewMockUpdateFn(nil),
-						MockStatusUpdate: test.NewMockStatusUpdateFn(nil),
-					},
-				},
-				remote: &test.MockClient{
-					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-						switch o := obj.(type) {
-						case *v1.Secret:
-							return nil
-						case *unstructured.Unstructured:
-							r := requirement.New()
-							r.SetWriteConnectionSecretToReference(&v1alpha1.LocalSecretReference{Name: "ola"})
-							r.DeepCopyInto(o)
-							return nil
-						}
-						return errBoom
-					},
-					MockPatch: test.NewMockPatchFn(nil),
-				},
-				opts: []ReconcilerOption{
-					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
-						return nil
-					}}),
-				},
-			},
-			want: want{
-				result: reconcile.Result{RequeueAfter: shortWait},
-				err:    errors.Wrap(errors.Wrap(errBoom, "cannot get object"), localPrefix+errApplySecret),
 			},
 		},
 	}

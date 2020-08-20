@@ -36,6 +36,14 @@ import (
 	"github.com/crossplane/agent/pkg/resource"
 )
 
+// PropagateFn is used to construct a Propagator with a bare function.
+type PropagateFn func(ctx context.Context, local, remote *requirement.Unstructured) error
+
+// Propagate calls the supplied function.
+func (p PropagateFn) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+	return p(ctx, local, remote)
+}
+
 // NewPropagatorChain returns a new PropagatorChain.
 func NewPropagatorChain(p ...Propagator) PropagatorChain {
 	return PropagatorChain(p)
@@ -78,7 +86,7 @@ func (sp *SpecPropagator) Propagate(ctx context.Context, local, remote *requirem
 	if err := fieldpath.Pave(remote.GetUnstructured().UnstructuredContent()).SetValue("spec", spec); err != nil {
 		return err
 	}
-	return sp.remoteClient.Apply(ctx, remote)
+	return errors.Wrap(sp.remoteClient.Apply(ctx, remote), remotePrefix+errApplyRequirement)
 }
 
 // NewLateInitializer returns a new LateInitializer.
@@ -109,18 +117,16 @@ func (li *LateInitializer) Propagate(ctx context.Context, local, remote *require
 		local.SetWriteConnectionSecretToReference(remote.GetWriteConnectionSecretToReference())
 	}
 	// TODO(muvaf): We need to late-init the unknown user-defined fields as well.
-	return li.localClient.Update(ctx, local)
+	return errors.Wrap(li.localClient.Update(ctx, local), localPrefix+errUpdateRequirement)
 }
 
 // NewStatusPropagator returns a new StatusPropagator.
-func NewStatusPropagator(kube client.Client) *StatusPropagator {
-	return &StatusPropagator{localClient: kube}
+func NewStatusPropagator() *StatusPropagator {
+	return &StatusPropagator{}
 }
 
 // StatusPropagator propagates the status from the second object to the first one.
-type StatusPropagator struct {
-	localClient client.Client
-}
+type StatusPropagator struct{}
 
 // Propagate copies the status of remote object into local object.
 func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
@@ -138,7 +144,7 @@ func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *requir
 	}
 	local.SetConditions(conditions.Conditions...)
 	// TODO(muvaf): Need to propagate other fields as well.
-	return sp.localClient.Status().Update(ctx, local)
+	return nil
 }
 
 // NewConnectionSecretPropagator returns a new *ConnectionSecretPropagator.
