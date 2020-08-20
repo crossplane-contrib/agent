@@ -19,7 +19,6 @@ package publication
 import (
 	"context"
 
-	"github.com/pkg/errors"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -69,7 +68,7 @@ type APIRemoteCRDRenderer struct {
 func (r *APIRemoteCRDRenderer) Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
 	remote := &v1beta1.CustomResourceDefinition{}
 	if err := r.client.Get(ctx, CRDNameOf(ip), remote); err != nil {
-		return nil, errors.Wrap(err, errGetCRD)
+		return nil, err
 	}
 	return resource.SanitizedDeepCopyObject(remote).(*v1beta1.CustomResourceDefinition), nil
 }

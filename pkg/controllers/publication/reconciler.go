@@ -180,6 +180,8 @@ type Reconciler struct {
 	record event.Recorder
 }
 
+// TODO(muvaf): Set error conditions on the InfrastructurePublication.
+
 // Reconcile reconciles InfrastructurePublication and does the necessary operations
 // to bootstrap reconciliation of that new type defined by InfrastructurePublication.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) { // nolint:gocyclo

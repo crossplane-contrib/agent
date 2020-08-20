@@ -17,10 +17,20 @@ limitations under the License.
 package resource
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
+)
+
+// Condition constants.
+const (
+	TypeAgentSync v1alpha1.ConditionType = "AgentSynced"
+
+	ReasonAgentSyncSuccess v1alpha1.ConditionReason = "Agent successfully synced the resource"
+	ReasonAgentSyncError   v1alpha1.ConditionReason = "Agent encountered an error during sync"
 )
 
 // SanitizedDeepCopyObject removes the metadata that can be specific to a cluster.
@@ -36,4 +46,27 @@ func SanitizedDeepCopyObject(in runtime.Object) resource.Object {
 	out.SetManagedFields(nil)
 	out.SetFinalizers(nil)
 	return out
+}
+
+// AgentSyncSuccess returns a condition indicating that Agent successfully
+// synced with the remote cluster.
+func AgentSyncSuccess() v1alpha1.Condition {
+	return v1alpha1.Condition{
+		Type:               TypeAgentSync,
+		Status:             corev1.ConditionTrue,
+		LastTransitionTime: metav1.Now(),
+		Reason:             ReasonAgentSyncSuccess,
+	}
+}
+
+// AgentSyncError returns a condition indicating that Agent encountered an
+// error while syncing the resource.
+func AgentSyncError(err error) v1alpha1.Condition {
+	return v1alpha1.Condition{
+		Type:               TypeAgentSync,
+		Status:             corev1.ConditionFalse,
+		LastTransitionTime: metav1.Now(),
+		Reason:             ReasonAgentSyncError,
+		Message:            err.Error(),
+	}
 }

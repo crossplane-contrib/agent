@@ -34,6 +34,8 @@ import (
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
+
+	"github.com/crossplane/agent/pkg/resource"
 )
 
 const (
@@ -57,6 +59,15 @@ const (
 	errAddFinalizer            = "cannot add finalizer"
 	errGetSecret               = "cannot get secret"
 	errApplySecret             = "cannot apply secret"
+)
+
+// Event reasons.
+const (
+	reasonCannotGetFromRemote   event.Reason = "CannotGetFromRemote"
+	reasonCannotAddFinalizer    event.Reason = "CannotAddFinalizer"
+	reasonCannotRemoveFinalizer event.Reason = "CannotRemoveFinalizer"
+	reasonCannotPropagate       event.Reason = "CannotPropagate"
+	reasonCannotDelete          event.Reason = "CannotDelete"
 )
 
 // WithLogger specifies how the Reconciler should log messages.
@@ -165,28 +176,44 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	remote := r.newInstance()
 	err := r.remote.Get(ctx, req.NamespacedName, remote)
 	if rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errGetRequirement)
+		log.Debug("Cannot get resource from remote", "error", err, "requeue-after", time.Now().Add(shortWait))
+		r.record.Event(local, event.Warning(reasonCannotGetFromRemote, err))
+		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errGetRequirement)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateRequirement)
 	}
 	if meta.WasDeleted(local) {
 		if kerrors.IsNotFound(err) {
 			if err := r.finalizer.RemoveFinalizer(ctx, local); err != nil {
-				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errRemoveFinalizer)
+				log.Debug("Cannot remove finalizer", "error", err, "requeue-after", time.Now().Add(shortWait))
+				r.record.Event(local, event.Warning(reasonCannotRemoveFinalizer, err))
+				local.SetConditions(resource.AgentSyncError(errors.Wrap(err, localPrefix+errRemoveFinalizer)))
+				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateRequirement)
 			}
 			return reconcile.Result{}, nil
 		}
 		if err := r.remote.Delete(ctx, remote); rresource.IgnoreNotFound(err) != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errDeleteRequirement)
+			log.Debug("Cannot delete local object", "error", err, "requeue-after", time.Now().Add(shortWait))
+			r.record.Event(local, event.Warning(reasonCannotDelete, err))
+			local.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errDeleteRequirement)))
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateRequirement)
 		}
-		return reconcile.Result{RequeueAfter: tinyWait}, nil
+		local.SetConditions(resource.AgentSyncSuccess().WithMessage("Deletion is successfully requested"))
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateRequirement)
 	}
 
 	if err := r.finalizer.AddFinalizer(ctx, local); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizer)
+		log.Debug("Cannot add finalizer", "error", err, "requeue-after", time.Now().Add(shortWait))
+		r.record.Event(local, event.Warning(reasonCannotAddFinalizer, err))
+		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, localPrefix+errAddFinalizer)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateRequirement)
 	}
 
 	if err := r.requirement.Propagate(ctx, local, remote); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, errPropagate)
+		log.Debug("Cannot run propagator", "error", err, "requeue-after", time.Now().Add(shortWait))
+		r.record.Event(local, event.Warning(reasonCannotPropagate, err))
+		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, errPropagate)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateRequirement)
 	}
-
+	local.SetConditions(resource.AgentSyncSuccess())
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, local), localPrefix+errStatusUpdateRequirement)
 }
