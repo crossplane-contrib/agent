@@ -71,8 +71,5 @@ func (r *APIRemoteCRDRenderer) Render(ctx context.Context, ip v1alpha1.Infrastru
 	if err := r.client.Get(ctx, CRDNameOf(ip), remote); err != nil {
 		return nil, errors.Wrap(err, errGetCRD)
 	}
-	crd := &v1beta1.CustomResourceDefinition{}
-	resource.OverrideInputMetadata(remote, crd)
-	remote.Spec.DeepCopyInto(&crd.Spec)
-	return crd, nil
+	return resource.SanitizedDeepCopyObject(remote).(*v1beta1.CustomResourceDefinition), nil
 }

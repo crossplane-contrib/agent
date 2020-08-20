@@ -121,5 +121,5 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 	// TODO(muvaf): Set condition on local CRD to tell when is the last time
 	// it's been synced.
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, crd, resource.OverrideGeneratedMetadata), local+errApplyCRD)
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, resource.SanitizedDeepCopyObject(crd)), local+errApplyCRD)
 }

@@ -44,7 +44,6 @@ import (
 	crequirement "github.com/crossplane/crossplane/pkg/controller/apiextensions/requirement"
 
 	"github.com/crossplane/agent/pkg/controllers/requirement"
-	"github.com/crossplane/agent/pkg/resource"
 )
 
 const (
@@ -273,7 +272,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	}
 
 	meta.AddOwnerReference(local, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
-	if err := r.local.Apply(ctx, local, rresource.MustBeControllableBy(p.GetUID()), resource.OverrideGeneratedMetadata); err != nil {
+	if err := r.local.Apply(ctx, local, rresource.MustBeControllableBy(p.GetUID())); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplyCRD)
 	}
 

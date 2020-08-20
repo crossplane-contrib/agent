@@ -154,8 +154,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.remote.Get(ctx, req.NamespacedName, ro); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
 	}
-	lo := ro.DeepCopyObject()
-	if err := r.local.Apply(ctx, lo, resource.OverrideGeneratedMetadata); err != nil {
+	lo := resource.SanitizedDeepCopyObject(ro)
+	if err := r.local.Apply(ctx, lo); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
 	}
 	// TODO(muvaf): We need to call status update to bring the status subresource

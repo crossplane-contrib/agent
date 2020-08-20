@@ -165,6 +165,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizer)
 	}
 
+	// todo: configurator here.
 	// Update the remote object with latest desired state.
 	resource.OverrideInputMetadata(local, remote)
 	resource.EqualizeRequirementSpec(local, remote)
@@ -201,11 +202,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// TODO(muvaf): Set condition to say waiting for secret.
 		return reconcile.Result{RequeueAfter: shortWait}, nil
 	}
-	ls := rs.DeepCopy()
+	ls := resource.SanitizedDeepCopyObject(rs)
 	ls.SetName(local.GetWriteConnectionSecretToReference().Name)
 	ls.SetNamespace(local.GetNamespace())
 	meta.AddOwnerReference(ls, meta.AsController(meta.ReferenceTo(local, local.GroupVersionKind())))
-	if err := r.local.Apply(ctx, ls, resource.OverrideGeneratedMetadata); err != nil {
+	if err := r.local.Apply(ctx, ls); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplySecret)
 	}
 	return reconcile.Result{RequeueAfter: longWait}, nil

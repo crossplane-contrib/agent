@@ -17,10 +17,8 @@ limitations under the License.
 package resource
 
 import (
-	"context"
 	"encoding/json"
 
-	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -30,25 +28,19 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
 )
 
-// OverrideGeneratedMetadata makes it possible to use "to" object to correspond to the
-// exact object in the cluster that "from" exists.
-func OverrideGeneratedMetadata(_ context.Context, from, to runtime.Object) error {
-	fromM, ok := from.(metav1.Object)
-	if !ok {
-		return errors.New("source object does not satisfy metav1.Object")
-	}
-	toM, ok := to.(metav1.Object)
-	if !ok {
-		return errors.New("target object does not satisfy metav1.Object")
-	}
-	toM.SetResourceVersion(fromM.GetResourceVersion())
-	toM.SetUID(fromM.GetUID())
-	toM.SetCreationTimestamp(fromM.GetCreationTimestamp())
-	toM.SetSelfLink(fromM.GetSelfLink())
-	toM.SetOwnerReferences(fromM.GetOwnerReferences())
-	toM.SetManagedFields(fromM.GetManagedFields())
-	toM.SetFinalizers(fromM.GetFinalizers())
-	return nil
+// SanitizedDeepCopyObject removes the metadata that can be specific to a cluster.
+// For example, owner references are references to resources in that cluster and
+// would be meaningless in another one.
+func SanitizedDeepCopyObject(in runtime.Object) resource.Object {
+	out, _ := in.DeepCopyObject().(resource.Object)
+	out.SetResourceVersion("")
+	out.SetUID("")
+	out.SetCreationTimestamp(metav1.Unix(0, 0))
+	out.SetSelfLink("")
+	out.SetOwnerReferences(nil)
+	out.SetManagedFields(nil)
+	out.SetFinalizers(nil)
+	return out
 }
 
 // OverrideInputMetadata copies the user-filled metadata from "from" object to "to".
