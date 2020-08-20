@@ -20,7 +20,7 @@ spec:
           image: {{ .Values.image.repository | default "crossplane/agent:latest" }}
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           command:
-            - crossplane-agent
+            - agent
           args:
             - "--mode"
             - "local"
@@ -41,7 +41,7 @@ spec:
           image: {{ .Values.image.repository | default "crossplane/agent:latest" }}
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           command:
-            - crossplane-agent
+            - agent
           args:
             - "--mode"
             - "remote"
