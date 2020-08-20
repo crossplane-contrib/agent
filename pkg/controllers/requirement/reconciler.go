@@ -91,27 +91,28 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 	ni := func() *requirement.Unstructured { return requirement.New(requirement.WithGroupVersionKind(gvk)) }
 	lc := unstructured.NewClient(mgr.GetClient())
 	rc := unstructured.NewClient(remoteClient)
+	rca := rresource.ClientApplicator{
+		Client:     rc,
+		Applicator: rresource.NewAPIPatchingApplicator(rc),
+	}
 	r := &Reconciler{
 		mgr: mgr,
 		local: rresource.ClientApplicator{
 			Client:     lc,
 			Applicator: rresource.NewAPIPatchingApplicator(lc),
 		},
-		remote: rresource.ClientApplicator{
-			Client:     rc,
-			Applicator: rresource.NewAPIPatchingApplicator(rc),
-		},
+		remote:      rca,
 		newInstance: ni,
 		log:         logging.NewNopLogger(),
 		finalizer:   rresource.NewAPIFinalizer(lc, finalizer),
+		requirement: NewPropagatorChain(
+			NewSpecPropagator(rca),
+			NewLateInitializer(lc),
+			NewStatusPropagator(lc),
+		),
 		// NOTE(muvaf): Late init should be done first to not override existing
 		// generated fields in the remote object such as resourceRef.
-		requirement: ConfiguratorChain([]Configurator{
-			NewMetadataPropagator(),
-			NewLateInitializer(),
-			NewSpecPropagator(),
-			NewStatusConfigurator(),
-		}),
+
 		record: event.NewNopRecorder(),
 	}
 
@@ -121,9 +122,9 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 	return r
 }
 
-// Configurator is used configure local and remote objects.
-type Configurator interface {
-	Configure(local, remote *requirement.Unstructured) error
+// Propagator is used to propagate values between objects.
+type Propagator interface {
+	Propagate(ctx context.Context, local, remote *requirement.Unstructured) error
 }
 
 // Reconciler syncs the given requirement instance from local cluster to remote
@@ -136,7 +137,7 @@ type Reconciler struct {
 	newInstance func() *requirement.Unstructured
 
 	finalizer   rresource.Finalizer
-	requirement Configurator
+	requirement Propagator
 
 	log    logging.Logger
 	record event.Recorder
@@ -179,15 +180,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizer)
 	}
 
-	// Update the remote object with latest desired state.
-	if err := r.requirement.Configure(local, remote); err != nil {
+	if err := r.requirement.Propagate(ctx, local, remote); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errApplyRequirement)
-	}
-	if err := r.remote.Apply(ctx, remote); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errApplyRequirement)
-	}
-	if err := r.local.Apply(ctx, local); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errUpdateRequirement)
 	}
 
 	if local.GetWriteConnectionSecretToReference() == nil {
