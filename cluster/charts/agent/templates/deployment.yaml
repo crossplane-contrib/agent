@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crossplane-agent
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app: crossplane-agent
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: crossplane-agent
+    spec:
+      serviceAccountName: crossplane-agent
+      imagePullSecrets: {{ .Values.imagePullSecrets }}
+      containers:
+        - name: local
+          image: {{ .Values.image.repository | default "crossplane/agent:latest" }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - agent
+          args:
+            - "--mode"
+            - "local"
+            - "--cluster-kubeconfig"
+            - "/kubeconfigs/cluster/kubeconfig"
+            {{ if ne (len .Values.defaultCredentials.secretName) 0 -}}
+            - "--default-kubeconfig"
+            - "/kubeconfigs/default/kubeconfig"
+          {{- end }}
+          volumeMounts:
+            - mountPath: "/kubeconfigs/cluster"
+              name: cluster-kubeconfig
+            {{ if ne (len .Values.defaultCredentials.secretName) 0 -}}
+            - mountPath: "/kubeconfigs/default"
+              name: default-kubeconfig
+        {{- end }}
+        - name: remote
+          image: {{ .Values.image.repository | default "crossplane/agent:latest" }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - agent
+          args:
+            - "--mode"
+            - "remote"
+            - "--cluster-kubeconfig"
+            - "/kubeconfigs/cluster/kubeconfig"
+            {{ if ne (len .Values.defaultCredentials.secretName) 0 -}}
+            - "--default-kubeconfig"
+            - "/kubeconfigs/default/kubeconfig"
+            {{- end }}
+          volumeMounts:
+            - mountPath: "/kubeconfigs/cluster"
+              name: cluster-kubeconfig
+            {{ if ne (len .Values.defaultCredentials.secretName) 0 -}}
+            - mountPath: "/kubeconfigs/default"
+              name: default-kubeconfig
+            {{- end }}
+      volumes:
+        # Cluster credentials have to be supplied one way or another.
+        - name: cluster-kubeconfig
+          secret:
+            secretName: {{ .Values.clusterCredentials.secretName | default .Values.defaultCredentials.secretName }}
+        {{ if ne (len .Values.defaultCredentials.secretName) 0 -}}
+        - name: default-kubeconfig
+          secret:
+            secretName: {{ .Values.defaultCredentials.secretName }}
+        {{- end }}
