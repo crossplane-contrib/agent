@@ -17,7 +17,6 @@ limitations under the License.
 package resource
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
@@ -93,7 +92,7 @@ func (x XRDWithClaim) Create(e event.CreateEvent) bool {
 	if !ok {
 		return true
 	}
-	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
+	return xrd.Spec.ClaimNames != nil
 }
 
 // Update returns true if the XRD is allowed to be reconciled.
@@ -102,7 +101,7 @@ func (x XRDWithClaim) Update(e event.UpdateEvent) bool {
 	if !ok {
 		return true
 	}
-	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
+	return xrd.Spec.ClaimNames != nil
 }
 
 // Delete returns true if the XRD is allowed to be reconciled.
@@ -111,7 +110,7 @@ func (x XRDWithClaim) Delete(e event.DeleteEvent) bool {
 	if !ok {
 		return true
 	}
-	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
+	return xrd.Spec.ClaimNames != nil
 }
 
 // Generic returns true if the XRD is allowed to be reconciled.
@@ -120,5 +119,5 @@ func (x XRDWithClaim) Generic(e event.GenericEvent) bool {
 	if !ok {
 		return true
 	}
-	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
+	return xrd.Spec.ClaimNames != nil
 }
