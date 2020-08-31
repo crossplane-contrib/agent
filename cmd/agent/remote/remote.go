@@ -63,8 +63,7 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 
 	for _, setup := range []func(mgr manager.Manager, localClient client.Client, logger logging.Logger) error{
 		crd.Setup,
-		apiextensions.SetupInfraPubSync,
-		apiextensions.SetupInfraDefSync,
+		apiextensions.SetupXRDSync,
 		apiextensions.SetupCompositionSync,
 	} {
 		if err := setup(mgr, localClient, log); err != nil {

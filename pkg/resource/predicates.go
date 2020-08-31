@@ -17,8 +17,11 @@ limitations under the License.
 package resource
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
 // NewNameFilter returns a new *NameFilter that uses the given list.
@@ -74,4 +77,48 @@ func (f *NameFilter) Generic(e event.GenericEvent) bool {
 		}
 	}
 	return false
+}
+
+// NewXRDWithClaim returns a new XRDWithClaim object.
+func NewXRDWithClaim() XRDWithClaim {
+	return XRDWithClaim{}
+}
+
+// XRDWithClaim only allows CompositeResourceDefinitions which offer a resource claim.
+type XRDWithClaim struct{}
+
+// Create returns true if the XRD is allowed to be reconciled.
+func (x XRDWithClaim) Create(e event.CreateEvent) bool {
+	xrd, ok := e.Object.(*v1alpha1.CompositeResourceDefinition)
+	if !ok {
+		return true
+	}
+	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
+}
+
+// Update returns true if the XRD is allowed to be reconciled.
+func (x XRDWithClaim) Update(e event.UpdateEvent) bool {
+	xrd, ok := e.ObjectNew.(*v1alpha1.CompositeResourceDefinition)
+	if !ok {
+		return true
+	}
+	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
+}
+
+// Delete returns true if the XRD is allowed to be reconciled.
+func (x XRDWithClaim) Delete(e event.DeleteEvent) bool {
+	xrd, ok := e.Object.(*v1alpha1.CompositeResourceDefinition)
+	if !ok {
+		return true
+	}
+	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
+}
+
+// Generic returns true if the XRD is allowed to be reconciled.
+func (x XRDWithClaim) Generic(e event.GenericEvent) bool {
+	xrd, ok := e.Object.(*v1alpha1.CompositeResourceDefinition)
+	if !ok {
+		return true
+	}
+	return xrd.Spec.ClaimNames != nil && xrd.Status.GetCondition(v1alpha1.TypeOffered).Status == corev1.ConditionTrue
 }

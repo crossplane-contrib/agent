@@ -30,19 +30,18 @@ import (
 const (
 	maxConcurrency = 5
 
-	infraPubCRDName    = "infrastructurepublications.apiextensions.crossplane.io"
-	infraDefCRDName    = "infrastructuredefinitions.apiextensions.crossplane.io"
+	xrdCRDName         = "compositeresourcedefinition.apiextensions.crossplane.io"
 	compositionCRDName = "compositions.apiextensions.crossplane.io"
 )
 
-// SetupInfraDefSync adds a controller that syncs InfrastructureDefinitions from
+// SetupXRDSync adds a controller that syncs CompositeResourceDefinitions from
 // remote cluster to local cluster.
-func SetupInfraDefSync(mgr ctrl.Manager, localClient client.Client, log logging.Logger) error {
-	name := "InfrastructureDefinitions"
+func SetupXRDSync(mgr ctrl.Manager, localClient client.Client, log logging.Logger) error {
+	name := "CompositeResourceDefinitions"
 
-	nl := func() runtime.Object { return &v1alpha1.InfrastructureDefinitionList{} }
+	nl := func() runtime.Object { return &v1alpha1.CompositeResourceDefinitionList{} }
 	gi := func(l runtime.Object) []rresource.Object {
-		list, _ := l.(*v1alpha1.InfrastructureDefinitionList)
+		list, _ := l.(*v1alpha1.CompositeResourceDefinitionList)
 		result := make([]rresource.Object, len(list.Items))
 		for i, val := range list.Items {
 			obj, _ := val.DeepCopyObject().(rresource.Object)
@@ -50,7 +49,7 @@ func SetupInfraDefSync(mgr ctrl.Manager, localClient client.Client, log logging.
 		}
 		return result
 	}
-	ni := func() rresource.Object { return &v1alpha1.InfrastructureDefinition{} }
+	ni := func() rresource.Object { return &v1alpha1.CompositeResourceDefinition{} }
 	ca := rresource.ClientApplicator{
 		Client:     localClient,
 		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
@@ -59,50 +58,14 @@ func SetupInfraDefSync(mgr ctrl.Manager, localClient client.Client, log logging.
 	r := NewReconciler(mgr,
 		ca,
 		WithLogger(log.WithValues("controller", name)),
-		WithCRDName(infraDefCRDName),
+		WithCRDName(xrdCRDName),
 		WithNewInstanceFn(ni),
 		WithNewObjectListFn(nl),
 		WithGetItemsFn(gi))
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
-		For(&v1alpha1.InfrastructureDefinition{}).
-		WithOptions(kcontroller.Options{MaxConcurrentReconciles: maxConcurrency}).
-		Complete(r)
-}
-
-// SetupInfraPubSync adds a controller that syncs InfrastructurePublications from
-// remote cluster to local cluster.
-func SetupInfraPubSync(mgr ctrl.Manager, localClient client.Client, log logging.Logger) error {
-	name := "InfrastructurePublications"
-
-	nl := func() runtime.Object { return &v1alpha1.InfrastructurePublicationList{} }
-	gi := func(l runtime.Object) []rresource.Object {
-		list, _ := l.(*v1alpha1.InfrastructurePublicationList)
-		result := make([]rresource.Object, len(list.Items))
-		for i, val := range list.Items {
-			obj, _ := val.DeepCopyObject().(rresource.Object)
-			result[i] = obj
-		}
-		return result
-	}
-	ni := func() rresource.Object { return &v1alpha1.InfrastructurePublication{} }
-	ca := rresource.ClientApplicator{
-		Client:     localClient,
-		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
-	}
-
-	r := NewReconciler(mgr,
-		ca,
-		WithLogger(log.WithValues("controller", name)),
-		WithCRDName(infraPubCRDName),
-		WithNewInstanceFn(ni),
-		WithNewObjectListFn(nl),
-		WithGetItemsFn(gi))
-
-	return ctrl.NewControllerManagedBy(mgr).
-		Named(name).
-		For(&v1alpha1.InfrastructurePublication{}).
+		For(&v1alpha1.CompositeResourceDefinition{}).
 		WithOptions(kcontroller.Options{MaxConcurrentReconciles: maxConcurrency}).
 		Complete(r)
 }

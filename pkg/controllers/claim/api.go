@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requirement
+package claim
 
 import (
 	"context"
@@ -31,16 +31,16 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 
 	"github.com/crossplane/agent/pkg/resource"
 )
 
 // PropagateFn is used to construct a Propagator with a bare function.
-type PropagateFn func(ctx context.Context, local, remote *requirement.Unstructured) error
+type PropagateFn func(ctx context.Context, local, remote *claim.Unstructured) error
 
 // Propagate calls the supplied function.
-func (p PropagateFn) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+func (p PropagateFn) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
 	return p(ctx, local, remote)
 }
 
@@ -53,7 +53,7 @@ func NewPropagatorChain(p ...Propagator) PropagatorChain {
 type PropagatorChain []Propagator
 
 // Propagate calls all Propagate functions one by one.
-func (pp PropagatorChain) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+func (pp PropagatorChain) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
 	for _, p := range pp {
 		if err := p.Propagate(ctx, local, remote); err != nil {
 			return err
@@ -74,7 +74,7 @@ type SpecPropagator struct {
 }
 
 // Propagate copies spec from one object to the other.
-func (sp *SpecPropagator) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+func (sp *SpecPropagator) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
 	remote.SetName(local.GetName())
 	remote.SetNamespace(local.GetNamespace())
 	remote.SetAnnotations(local.GetAnnotations())
@@ -102,7 +102,7 @@ type LateInitializer struct {
 
 // Propagate copies the values from observed to desired if that field is empty in
 // desired object.
-func (li *LateInitializer) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+func (li *LateInitializer) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
 	// We fill up the missing pieces in our desired state by late initializing.
 	if local.GetCompositionSelector() == nil && remote.GetCompositionSelector() != nil {
 		local.SetCompositionSelector(remote.GetCompositionSelector())
@@ -129,7 +129,7 @@ func NewStatusPropagator() *StatusPropagator {
 type StatusPropagator struct{}
 
 // Propagate copies the status of remote object into local object.
-func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
 	status, err := fieldpath.Pave(remote.GetUnstructured().UnstructuredContent()).GetValue("status")
 	if err != nil {
 		return rresource.Ignore(fieldpath.IsNotFound, err)
@@ -160,7 +160,7 @@ type ConnectionSecretPropagator struct {
 }
 
 // Propagate propagates the connection secret from remote cluster to local cluster.
-func (csp *ConnectionSecretPropagator) Propagate(ctx context.Context, local, remote *requirement.Unstructured) error {
+func (csp *ConnectionSecretPropagator) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
 	if local.GetWriteConnectionSecretToReference() == nil || remote.GetWriteConnectionSecretToReference() == nil {
 		return nil
 	}

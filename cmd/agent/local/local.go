@@ -28,7 +28,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane/apis/apiextensions"
 
-	"github.com/crossplane/agent/pkg/controllers/publication"
+	"github.com/crossplane/agent/pkg/controllers/xrd"
 )
 
 // Agent configures & starts the manager that will watch the local cluster.
@@ -61,8 +61,8 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 		return errors.Wrap(err, "Cannot add Crossplane apiextensions API to scheme")
 	}
 	// TODO(muvaf): Need to pass in the default config.
-	if err := publication.Setup(mgr, clusterRemoteClient, log); err != nil {
-		return errors.Wrap(err, "cannot setup infrastructurepublication reconciler")
+	if err := xrd.Setup(mgr, clusterRemoteClient, log); err != nil {
+		return errors.Wrap(err, "cannot setup CompositeResourceDefinition reconciler")
 	}
 
 	return errors.Wrap(mgr.Start(ctrl.SetupSignalHandler()), "cannot start controller manager")

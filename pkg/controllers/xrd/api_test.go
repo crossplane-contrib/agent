@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package publication
+package xrd
 
 import (
 	"context"
@@ -34,7 +34,7 @@ import (
 func TestRender(t *testing.T) {
 	type args struct {
 		kube client.Client
-		ip   v1alpha1.InfrastructurePublication
+		xrd  v1alpha1.CompositeResourceDefinition
 	}
 	type want struct {
 		crd *apiextensions.CustomResourceDefinition
@@ -86,7 +86,7 @@ func TestRender(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			r := NewAPIRemoteCRDRenderer(tc.args.kube)
-			got, err := r.Render(context.Background(), tc.args.ip)
+			got, err := r.Render(context.Background(), tc.args.xrd)
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\nReason: %s\nRender(...): -want error, +got error:\n%s", tc.reason, diff)

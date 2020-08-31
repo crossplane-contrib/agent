@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requirement
+package claim
 
 import (
 	"context"
@@ -33,7 +33,7 @@ import (
 
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 
 	"github.com/crossplane/agent/pkg/resource"
@@ -61,7 +61,7 @@ func TestReconcile(t *testing.T) {
 		want   want
 	}{
 		"LocalGetFailed": {
-			reason: "An error should be returned if local requirement cannot be retrieved",
+			reason: "An error should be returned if local claim cannot be retrieved",
 			args: args{
 				m: &fake.Manager{
 					Client: &test.MockClient{MockGet: test.NewMockGetFn(errBoom)},
@@ -73,7 +73,7 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		"NotFound": {
-			reason: "No error should be returned if local requirement is gone",
+			reason: "No error should be returned if local claim is gone",
 			args: args{
 				m: &fake.Manager{
 					Client: &test.MockClient{MockGet: test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, ""))},
@@ -81,16 +81,16 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		"RemoteGetFailed": {
-			reason: "An error should be returned if remote requirement cannot be retrieved",
+			reason: "An error should be returned if remote claim cannot be retrieved",
 			args: args{
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: test.NewMockGetFn(nil),
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
-							want := requirement.New(requirement.WithGroupVersionKind(gvk))
+							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, remotePrefix+errGetRequirement)))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
-								reason := "An error should be returned if remote requirement cannot be retrieved"
+								reason := "An error should be returned if remote claim cannot be retrieved"
 								t.Errorf("\nReason: %s\n-want, +got:\n%s", reason, diff)
 							}
 							return nil
@@ -104,12 +104,12 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		"RemoteNotFoundAndDeleted": {
-			reason: "No error should be returned if deletion is requested and the remote requirement is gone",
+			reason: "No error should be returned if deletion is requested and the remote claim is gone",
 			args: args{
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							l := requirement.New(requirement.WithGroupVersionKind(gvk))
+							l := claim.New(claim.WithGroupVersionKind(gvk))
 							l.SetDeletionTimestamp(&now)
 							l.DeepCopyInto(obj.(*unstructured.Unstructured))
 							return nil
@@ -130,13 +130,13 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							l := requirement.New(requirement.WithGroupVersionKind(gvk))
+							l := claim.New(claim.WithGroupVersionKind(gvk))
 							l.SetDeletionTimestamp(&now)
 							l.DeepCopyInto(obj.(*unstructured.Unstructured))
 							return nil
 						},
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
-							want := requirement.New(requirement.WithGroupVersionKind(gvk))
+							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetDeletionTimestamp(&now)
 							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, localPrefix+errRemoveFinalizer)))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
@@ -166,13 +166,13 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							l := requirement.New(requirement.WithGroupVersionKind(gvk))
+							l := claim.New(claim.WithGroupVersionKind(gvk))
 							l.SetDeletionTimestamp(&now)
 							l.DeepCopyInto(obj.(*unstructured.Unstructured))
 							return nil
 						},
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
-							want := requirement.New(requirement.WithGroupVersionKind(gvk))
+							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetDeletionTimestamp(&now)
 							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, remotePrefix+errDeleteRequirement)))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
@@ -200,13 +200,13 @@ func TestReconcile(t *testing.T) {
 				m: &fake.Manager{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
-							l := requirement.New(requirement.WithGroupVersionKind(gvk))
+							l := claim.New(claim.WithGroupVersionKind(gvk))
 							l.SetDeletionTimestamp(&now)
 							l.DeepCopyInto(obj.(*unstructured.Unstructured))
 							return nil
 						},
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
-							want := requirement.New(requirement.WithGroupVersionKind(gvk))
+							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetDeletionTimestamp(&now)
 							want.SetConditions(resource.AgentSyncSuccess().WithMessage("Deletion is successfully requested"))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
@@ -235,7 +235,7 @@ func TestReconcile(t *testing.T) {
 					Client: &test.MockClient{
 						MockGet: test.NewMockGetFn(nil),
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
-							want := requirement.New(requirement.WithGroupVersionKind(gvk))
+							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, localPrefix+errAddFinalizer)))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
 								reason := "An error should be returned if finalizer cannot be added"
@@ -263,7 +263,7 @@ func TestReconcile(t *testing.T) {
 					Client: &test.MockClient{
 						MockGet: test.NewMockGetFn(nil),
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
-							want := requirement.New(requirement.WithGroupVersionKind(gvk))
+							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, errPropagate)))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
 								reason := "An error should be returned if propagator fails"
@@ -278,7 +278,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(rresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ rresource.Object) error {
 						return nil
 					}}),
-					WithPropagator(PropagateFn(func(_ context.Context, _, _ *requirement.Unstructured) error {
+					WithPropagator(PropagateFn(func(_ context.Context, _, _ *claim.Unstructured) error {
 						return errBoom
 					})),
 				},
@@ -294,7 +294,7 @@ func TestReconcile(t *testing.T) {
 					Client: &test.MockClient{
 						MockGet: test.NewMockGetFn(nil),
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
-							want := requirement.New(requirement.WithGroupVersionKind(gvk))
+							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetConditions(resource.AgentSyncSuccess())
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
 								reason := "No error should be returned if everything goes well."
@@ -309,7 +309,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(rresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ rresource.Object) error {
 						return nil
 					}}),
-					WithPropagator(PropagateFn(func(_ context.Context, _, _ *requirement.Unstructured) error {
+					WithPropagator(PropagateFn(func(_ context.Context, _, _ *claim.Unstructured) error {
 						return nil
 					})),
 				},

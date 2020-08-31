@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package publication
+package xrd
 
 import (
 	"context"
+
+	"github.com/pkg/errors"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,16 +38,16 @@ func NewNopRenderer() NopRenderer {
 type NopRenderer struct{}
 
 // Render does nothing.
-func (n NopRenderer) Render(_ context.Context, _ v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
+func (n NopRenderer) Render(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
 	return nil, nil
 }
 
 // RenderFn is used to provide a single function instead of a full object to satisfy
 // Render interface.
-type RenderFn func(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
+type RenderFn func(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error)
 
 // Render calls RenderFn it belongs to.
-func (r RenderFn) Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
+func (r RenderFn) Render(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
 	return r(ctx, ip)
 }
 
@@ -63,12 +65,12 @@ type APIRemoteCRDRenderer struct {
 	client client.Client
 }
 
-// Render returns the sanitized form of the CRD of given InfrastructurePublication
+// Render returns the sanitized form of the claim CRD of given CompositeResourceDefinition
 // by fetching it from remote cluster and stripping out cluster-specific metadata.
-func (r *APIRemoteCRDRenderer) Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error) {
+func (r *APIRemoteCRDRenderer) Render(ctx context.Context, xrd v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
 	remote := &v1beta1.CustomResourceDefinition{}
-	if err := r.client.Get(ctx, CRDNameOf(ip), remote); err != nil {
-		return nil, err
+	if err := r.client.Get(ctx, GetClaimCRDName(xrd), remote); err != nil {
+		return nil, errors.Wrap(err, errGetCRD)
 	}
 	return resource.SanitizedDeepCopyObject(remote).(*v1beta1.CustomResourceDefinition), nil
 }

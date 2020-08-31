@@ -73,8 +73,7 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 		For(&v1beta1.CustomResourceDefinition{}).
 		WithOptions(kcontroller.Options{MaxConcurrentReconciles: maxConcurrency}).
 		WithEventFilter(resource.NewNameFilter([]types.NamespacedName{
-			{Name: "infrastructuredefinitions.apiextensions.crossplane.io"},
-			{Name: "infrastructurepublications.apiextensions.crossplane.io"},
+			{Name: "compositeresourcedefinitions.apiextensions.crossplane.io"},
 			{Name: "compositions.apiextensions.crossplane.io"},
 		})).
 		Complete(r)

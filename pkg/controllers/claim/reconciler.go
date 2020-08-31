@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requirement
+package claim
 
 import (
 	"context"
@@ -33,7 +33,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
 	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 
 	"github.com/crossplane/agent/pkg/resource"
 )
@@ -49,12 +49,12 @@ const (
 	localPrefix  = "local cluster: "
 	remotePrefix = "remote cluster: "
 
-	errGetRequirement          = "cannot get requirement"
-	errDeleteRequirement       = "cannot delete requirement"
-	errApplyRequirement        = "cannot apply requirement"
+	errGetRequirement          = "cannot get claim"
+	errDeleteRequirement       = "cannot delete claim"
+	errApplyRequirement        = "cannot apply claim"
 	errPropagate               = "cannot run propagator"
-	errUpdateRequirement       = "cannot update requirement"
-	errStatusUpdateRequirement = "cannot update status of requirement"
+	errUpdateRequirement       = "cannot update claim"
+	errStatusUpdateRequirement = "cannot update status of claim"
 	errRemoveFinalizer         = "cannot remove finalizer"
 	errAddFinalizer            = "cannot add finalizer"
 	errGetSecret               = "cannot get secret"
@@ -95,7 +95,7 @@ func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
 // between clusters.
 func WithPropagator(p Propagator) ReconcilerOption {
 	return func(r *Reconciler) {
-		r.requirement = p
+		r.claim = p
 	}
 }
 
@@ -104,7 +104,7 @@ type ReconcilerOption func(*Reconciler)
 
 // NewReconciler returns a new *Reconciler.
 func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.GroupVersionKind, opts ...ReconcilerOption) *Reconciler {
-	ni := func() *requirement.Unstructured { return requirement.New(requirement.WithGroupVersionKind(gvk)) }
+	ni := func() *claim.Unstructured { return claim.New(claim.WithGroupVersionKind(gvk)) }
 	lc := unstructured.NewClient(mgr.GetClient())
 	lca := rresource.ClientApplicator{
 		Client:     lc,
@@ -122,7 +122,7 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 		newInstance: ni,
 		log:         logging.NewNopLogger(),
 		finalizer:   rresource.NewAPIFinalizer(lc, finalizer),
-		requirement: NewPropagatorChain(
+		claim: NewPropagatorChain(
 			NewSpecPropagator(rca),
 			NewLateInitializer(lc),
 			NewStatusPropagator(),
@@ -139,20 +139,20 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 
 // Propagator is used to propagate values between objects.
 type Propagator interface {
-	Propagate(ctx context.Context, local, remote *requirement.Unstructured) error
+	Propagate(ctx context.Context, local, remote *claim.Unstructured) error
 }
 
-// Reconciler syncs the given requirement instance from local cluster to remote
+// Reconciler syncs the given claim instance from local cluster to remote
 // cluster and fetches its connection secret to local cluster if it's available.
 type Reconciler struct {
 	mgr    ctrl.Manager
 	local  rresource.ClientApplicator
 	remote rresource.ClientApplicator
 
-	newInstance func() *requirement.Unstructured
+	newInstance func() *claim.Unstructured
 
-	finalizer   rresource.Finalizer
-	requirement Propagator
+	finalizer rresource.Finalizer
+	claim     Propagator
 
 	log    logging.Logger
 	record event.Recorder
@@ -208,7 +208,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateRequirement)
 	}
 
-	if err := r.requirement.Propagate(ctx, local, remote); err != nil {
+	if err := r.claim.Propagate(ctx, local, remote); err != nil {
 		log.Debug("Cannot run propagator", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(local, event.Warning(reasonCannotPropagate, err))
 		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, errPropagate)))

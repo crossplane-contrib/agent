@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requirement
+package claim
 
 import (
 	"context"
@@ -28,12 +28,12 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/requirement"
+	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 )
 
 var (
-	localReq = unstructured.Unstructured{Object: map[string]interface{}{
+	localClaim = unstructured.Unstructured{Object: map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"name":      "local-name",
 			"namespace": "local-namespace",
@@ -46,7 +46,7 @@ var (
 			"random-field": "random-val",
 		},
 	}}
-	remoteReq = unstructured.Unstructured{Object: map[string]interface{}{
+	remoteClaim = unstructured.Unstructured{Object: map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"name":      "local-name",
 			"namespace": "local-namespace",
@@ -63,8 +63,8 @@ var (
 
 func TestSpecPropagator(t *testing.T) {
 	type args struct {
-		local  *requirement.Unstructured
-		remote *requirement.Unstructured
+		local  *claim.Unstructured
+		remote *claim.Unstructured
 		kube   resource.ClientApplicator
 	}
 	type want struct {
@@ -78,8 +78,8 @@ func TestSpecPropagator(t *testing.T) {
 		"Successful": {
 			reason: "Should not return error if everything goes well and matches",
 			args: args{
-				local:  &requirement.Unstructured{Unstructured: *localReq.DeepCopy()},
-				remote: &requirement.Unstructured{Unstructured: *remoteReq.DeepCopy()},
+				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
+				remote: &claim.Unstructured{Unstructured: *remoteClaim.DeepCopy()},
 				kube: resource.ClientApplicator{
 					Client: &test.MockClient{},
 					Applicator: resource.ApplyFn(func(_ context.Context, object runtime.Object, _ ...resource.ApplyOption) error {
@@ -91,8 +91,8 @@ func TestSpecPropagator(t *testing.T) {
 		"ApplyFailed": {
 			reason: "Should return error if Apply fails",
 			args: args{
-				local:  &requirement.Unstructured{Unstructured: *localReq.DeepCopy()},
-				remote: requirement.New(),
+				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
+				remote: claim.New(),
 				kube: resource.ClientApplicator{
 					Client: &test.MockClient{},
 					Applicator: resource.ApplyFn(func(_ context.Context, object runtime.Object, _ ...resource.ApplyOption) error {
@@ -123,8 +123,8 @@ func TestSpecPropagator(t *testing.T) {
 
 func TestLateInitializer(t *testing.T) {
 	type args struct {
-		local  *requirement.Unstructured
-		remote *requirement.Unstructured
+		local  *claim.Unstructured
+		remote *claim.Unstructured
 		kube   client.Client
 	}
 	type want struct {
@@ -138,12 +138,12 @@ func TestLateInitializer(t *testing.T) {
 		"Successful": {
 			reason: "Should not return error if everything goes well and matches",
 			args: args{
-				local: &requirement.Unstructured{Unstructured: unstructured.Unstructured{Object: map[string]interface{}{
+				local: &claim.Unstructured{Unstructured: unstructured.Unstructured{Object: map[string]interface{}{
 					"spec": map[string]interface{}{
 						"random-field": "random-val",
 					},
 				}}},
-				remote: &requirement.Unstructured{Unstructured: *remoteReq.DeepCopy()},
+				remote: &claim.Unstructured{Unstructured: *remoteClaim.DeepCopy()},
 				kube: &test.MockClient{
 					MockUpdate: test.NewMockUpdateFn(nil),
 				},
@@ -152,8 +152,8 @@ func TestLateInitializer(t *testing.T) {
 		"UpdateFailed": {
 			reason: "Should return error if Update fails",
 			args: args{
-				local:  requirement.New(),
-				remote: requirement.New(),
+				local:  claim.New(),
+				remote: claim.New(),
 				kube: &test.MockClient{
 					MockUpdate: test.NewMockUpdateFn(errBoom),
 				},
@@ -181,13 +181,13 @@ func TestLateInitializer(t *testing.T) {
 
 func TestStatusPropagator(t *testing.T) {
 	type args struct {
-		local  *requirement.Unstructured
-		remote *requirement.Unstructured
+		local  *claim.Unstructured
+		remote *claim.Unstructured
 	}
 	type want struct {
 		err error
 	}
-	remoteWithStatus := &requirement.Unstructured{Unstructured: *remoteReq.DeepCopy()}
+	remoteWithStatus := &claim.Unstructured{Unstructured: *remoteClaim.DeepCopy()}
 	remoteWithStatus.SetConditions(v1alpha1.Available())
 	cases := map[string]struct {
 		reason string
@@ -197,7 +197,7 @@ func TestStatusPropagator(t *testing.T) {
 		"Successful": {
 			reason: "Should not return error if everything goes well and matches",
 			args: args{
-				local:  &requirement.Unstructured{Unstructured: *localReq.DeepCopy()},
+				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
 				remote: remoteWithStatus,
 			},
 		},
@@ -220,8 +220,8 @@ func TestStatusPropagator(t *testing.T) {
 
 func TestConnectionSecretPropagator(t *testing.T) {
 	type args struct {
-		local        *requirement.Unstructured
-		remote       *requirement.Unstructured
+		local        *claim.Unstructured
+		remote       *claim.Unstructured
 		localClient  resource.ClientApplicator
 		remoteClient resource.ClientApplicator
 	}
@@ -236,8 +236,8 @@ func TestConnectionSecretPropagator(t *testing.T) {
 		"Successful": {
 			reason: "Should not return error if everything goes well and matches",
 			args: args{
-				local:  &requirement.Unstructured{Unstructured: *localReq.DeepCopy()},
-				remote: &requirement.Unstructured{Unstructured: *remoteReq.DeepCopy()},
+				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
+				remote: &claim.Unstructured{Unstructured: *remoteClaim.DeepCopy()},
 				remoteClient: resource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: test.NewMockGetFn(nil),
@@ -253,14 +253,14 @@ func TestConnectionSecretPropagator(t *testing.T) {
 		"NoSecret": {
 			reason: "Should be no-op if no secret reference exists",
 			args: args{
-				local: requirement.New(),
+				local: claim.New(),
 			},
 		},
 		"RemoteGetFailed": {
 			reason: "Should return error if secret from remote cluster cannot be fetched",
 			args: args{
-				local:  &requirement.Unstructured{Unstructured: *localReq.DeepCopy()},
-				remote: &requirement.Unstructured{Unstructured: *remoteReq.DeepCopy()},
+				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
+				remote: &claim.Unstructured{Unstructured: *remoteClaim.DeepCopy()},
 				remoteClient: resource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: test.NewMockGetFn(errBoom),
@@ -274,8 +274,8 @@ func TestConnectionSecretPropagator(t *testing.T) {
 		"LocalApplyFailed": {
 			reason: "Should return error if secret cannot be applied in local cluster",
 			args: args{
-				local:  &requirement.Unstructured{Unstructured: *localReq.DeepCopy()},
-				remote: &requirement.Unstructured{Unstructured: *remoteReq.DeepCopy()},
+				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
+				remote: &claim.Unstructured{Unstructured: *remoteClaim.DeepCopy()},
 				remoteClient: resource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: test.NewMockGetFn(nil),
