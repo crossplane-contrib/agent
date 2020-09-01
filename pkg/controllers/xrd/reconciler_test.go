@@ -85,8 +85,8 @@ func TestReconcile(t *testing.T) {
 				result: reconcile.Result{RequeueAfter: shortWait},
 			},
 		},
-		"RenderFailed": {
-			reason: "An error should be returned if CRD cannot be rendered",
+		"FetchFailed": {
+			reason: "An error should be returned if CRD cannot be fetched",
 			args: args{
 				m: &fake.Manager{
 					Client: &test.MockClient{
@@ -94,13 +94,13 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return nil, errBoom
 					})),
 				},
 			},
 			want: want{
-				err:    errors.Wrap(errBoom, remotePrefix+errRenderCRD),
+				err:    errors.Wrap(errBoom, remotePrefix+errFetchCRD),
 				result: reconcile.Result{RequeueAfter: shortWait},
 			},
 		},
@@ -155,7 +155,7 @@ func TestReconcile(t *testing.T) {
 							return errBoom
 						},
 					}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -189,7 +189,7 @@ func TestReconcile(t *testing.T) {
 							return nil
 						},
 					}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -219,7 +219,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -265,7 +265,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -312,7 +312,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -353,7 +353,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -396,7 +396,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 				opts: []ReconcilerOption{
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							ObjectMeta: metav1.ObjectMeta{
 								CreationTimestamp: now,
@@ -449,7 +449,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -475,7 +475,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{}, nil
 					})),
 				},
@@ -499,7 +499,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							Status: apiextensions.CustomResourceDefinitionStatus{
 								Conditions: []apiextensions.CustomResourceDefinitionCondition{
@@ -537,7 +537,7 @@ func TestReconcile(t *testing.T) {
 					WithFinalizer(resource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ resource.Object) error {
 						return nil
 					}}),
-					WithCRDRenderer(RenderFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
+					WithCRDFetcher(FetchFn(func(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*apiextensions.CustomResourceDefinition, error) {
 						return &apiextensions.CustomResourceDefinition{
 							Status: apiextensions.CustomResourceDefinitionStatus{
 								Conditions: []apiextensions.CustomResourceDefinitionCondition{

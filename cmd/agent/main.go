@@ -53,7 +53,7 @@ func main() {
 	}
 	defaultConfig, err := clientcmd.BuildConfigFromFlags("", *dsa)
 	if err != nil {
-		kingpin.FatalUsage("could not parse default kubeconfig %s", *csa)
+		kingpin.FatalUsage("could not parse default kubeconfig %s", *dsa)
 	}
 	clusterConfig, err := clientcmd.BuildConfigFromFlags("", *csa)
 	if err != nil {

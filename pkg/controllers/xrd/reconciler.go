@@ -61,7 +61,7 @@ const (
 	errStartController = "cannot start controller"
 	errRemoveFinalizer = "cannot remove finalizer"
 	errGetXRD          = "cannot get xrd"
-	errRenderCRD       = "cannot render a crd from remote xrd"
+	errFetchCRD        = "cannot fetch the crd of xrd from remote"
 	errGetCRD          = "cannot get custom resource definition"
 	errApplyCRD        = "cannot apply custom resource definition"
 	errListCR          = "cannot list custom resources of claim type"
@@ -76,7 +76,7 @@ const (
 func Setup(mgr manager.Manager, remoteClient client.Client, logger logging.Logger) error {
 	name := "ClaimCustomResourceDefinitions"
 	r := NewReconciler(mgr, remoteClient,
-		WithCRDRenderer(NewAPIRemoteCRDRenderer(remoteClient)),
+		WithCRDFetcher(NewAPIRemoteCRDFetcher(remoteClient)),
 		WithLogger(logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))))
 	return ctrl.NewControllerManagedBy(mgr).
@@ -101,8 +101,8 @@ func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
 	}
 }
 
-// WithCRDRenderer specifies how the Reconciler should render CRDs.
-func WithCRDRenderer(re CRDRenderer) ReconcilerOption {
+// WithCRDFetcher specifies how the Reconciler should fetch CRDs of claims.
+func WithCRDFetcher(re CRDFetcher) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.crd = re
 	}
@@ -143,7 +143,7 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, opts ...Reco
 		},
 		remote:    remoteClient,
 		engine:    controller.NewEngine(mgr),
-		crd:       NewNopRenderer(),
+		crd:       NewNopFetcher(),
 		finalizer: rresource.NewAPIFinalizer(mgr.GetClient(), finalizer),
 		log:       logging.NewNopLogger(),
 		record:    event.NewNopRecorder(),
@@ -160,22 +160,22 @@ type ControllerEngine interface {
 	Stop(name string)
 }
 
-// CRDRenderer can be satisfied with objects that can return a CRD with CompositeResourceDefinition
-// information.
-type CRDRenderer interface {
-	Render(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error)
+// CRDFetcher can be satisfied with objects that can return a CRD with
+// CompositeResourceDefinition information.
+type CRDFetcher interface {
+	Fetch(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error)
 }
 
 // Reconciler watches the CompositeResourceDefinition with resource claim offerings
-// in the cluster and creates a CRD for each of them with spec that is rendered
-// via supplied CRDRenderer. Then it creates a controller for each new type that
+// in the cluster and creates a CRD for each of them with spec that is fetched
+// via supplied CRDFetcher. Then it creates a controller for each new type that
 // will sync the instances of that type from local cluster to remote cluster.
 type Reconciler struct {
 	mgr    ctrl.Manager
 	local  rresource.ClientApplicator
 	remote client.Client
 
-	crd       CRDRenderer
+	crd       CRDFetcher
 	engine    ControllerEngine
 	finalizer rresource.Finalizer
 
@@ -198,9 +198,9 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.local.Get(ctx, req.NamespacedName, xrd); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetXRD)
 	}
-	local, err := r.crd.Render(ctx, *xrd)
+	local, err := r.crd.Fetch(ctx, *xrd)
 	if rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errRenderCRD)
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errFetchCRD)
 	}
 
 	if meta.WasDeleted(xrd) {

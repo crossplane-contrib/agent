@@ -29,45 +29,45 @@ import (
 	"github.com/crossplane/agent/pkg/resource"
 )
 
-// NewNopRenderer returns a NopRenderer.
-func NewNopRenderer() NopRenderer {
-	return NopRenderer{}
+// NewNopFetcher returns a NopFetcher.
+func NewNopFetcher() NopFetcher {
+	return NopFetcher{}
 }
 
-// NopRenderer does nothing.
-type NopRenderer struct{}
+// NopFetcher does nothing.
+type NopFetcher struct{}
 
-// Render does nothing.
-func (n NopRenderer) Render(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
+// Fetch does nothing.
+func (n NopFetcher) Fetch(_ context.Context, _ v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
 	return nil, nil
 }
 
-// RenderFn is used to provide a single function instead of a full object to satisfy
-// Render interface.
-type RenderFn func(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error)
+// FetchFn is used to provide a single function instead of a full object to satisfy
+// Fetch interface.
+type FetchFn func(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error)
 
-// Render calls RenderFn it belongs to.
-func (r RenderFn) Render(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
+// Fetch calls FetchFn it belongs to.
+func (r FetchFn) Fetch(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
 	return r(ctx, ip)
 }
 
-// NewAPIRemoteCRDRenderer returns a new APIRemoteCRDRenderer.
-func NewAPIRemoteCRDRenderer(client client.Client) *APIRemoteCRDRenderer {
-	return &APIRemoteCRDRenderer{
+// NewAPIRemoteCRDFetcher returns a new APIRemoteCRDFetcher.
+func NewAPIRemoteCRDFetcher(client client.Client) *APIRemoteCRDFetcher {
+	return &APIRemoteCRDFetcher{
 		client: client,
 	}
 }
 
-// APIRemoteCRDRenderer renders the referenced CRD by fetching it from given
-// cluster and cleaning up the metadata enough that it can be created in another
-// cluster.
-type APIRemoteCRDRenderer struct {
+// APIRemoteCRDFetcher gets the sanitized form of the claim CRD of given
+// CompositeResourceDefinition by fetching it from remote cluster and stripping
+// out cluster-specific metadata.
+type APIRemoteCRDFetcher struct {
 	client client.Client
 }
 
-// Render returns the sanitized form of the claim CRD of given CompositeResourceDefinition
+// Fetch returns the sanitized form of the claim CRD of given CompositeResourceDefinition
 // by fetching it from remote cluster and stripping out cluster-specific metadata.
-func (r *APIRemoteCRDRenderer) Render(ctx context.Context, xrd v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
+func (r *APIRemoteCRDFetcher) Fetch(ctx context.Context, xrd v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error) {
 	remote := &v1beta1.CustomResourceDefinition{}
 	if err := r.client.Get(ctx, GetClaimCRDName(xrd), remote); err != nil {
 		return nil, errors.Wrap(err, errGetCRD)

@@ -31,7 +31,7 @@ import (
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
-func TestRender(t *testing.T) {
+func TestFetch(t *testing.T) {
 	type args struct {
 		kube client.Client
 		xrd  v1alpha1.CompositeResourceDefinition
@@ -56,8 +56,8 @@ func TestRender(t *testing.T) {
 				err: errors.Wrap(errBoom, errGetCRD),
 			},
 		},
-		"RenderedCorrectly": {
-			reason: "A proper CRD should be rendered without UID, timestamps etc.",
+		"FetchedCorrectly": {
+			reason: "A proper CRD should be fetched without UID, timestamps etc.",
 			args: args{
 				kube: &test.MockClient{
 					MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
@@ -85,15 +85,15 @@ func TestRender(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := NewAPIRemoteCRDRenderer(tc.args.kube)
-			got, err := r.Render(context.Background(), tc.args.xrd)
+			r := NewAPIRemoteCRDFetcher(tc.args.kube)
+			got, err := r.Fetch(context.Background(), tc.args.xrd)
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
-				t.Errorf("\nReason: %s\nRender(...): -want error, +got error:\n%s", tc.reason, diff)
+				t.Errorf("\nReason: %s\nFetch(...): -want error, +got error:\n%s", tc.reason, diff)
 			}
 
 			if diff := cmp.Diff(tc.want.crd, got); diff != "" {
-				t.Errorf("\nReason: %s\nRender(...): -want, +got:\n%s", tc.reason, diff)
+				t.Errorf("\nReason: %s\nFetch(...): -want, +got:\n%s", tc.reason, diff)
 			}
 		})
 	}
