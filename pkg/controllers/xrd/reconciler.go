@@ -198,14 +198,18 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if err := r.local.Get(ctx, req.NamespacedName, xrd); rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetXRD)
 	}
+
+	// We will fetch the CRD of the claim that CompositeResourceDefinition offers
+	// and apply it in the local cluster so that we can start the sync controller
+	// targeting that type.
 	local, err := r.crd.Fetch(ctx, *xrd)
 	if rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errFetchCRD)
 	}
 
+	// In case XRD is deleted, we need to clean up the CRD and stop its controller.
 	if meta.WasDeleted(xrd) {
 		xrd.Status.SetConditions(v1alpha1.Deleting())
-
 		err := r.local.Get(ctx, GetClaimCRDName(*xrd), local)
 		if rresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
@@ -242,9 +246,6 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// the controller we started to reconcile them. This ensures the
 		// controller has a chance to execute its cleanup logic, if any.
 		if len(l.Items) > 0 {
-			// TODO(negz): DeleteAllOf does not work here, despite working in
-			// the definition controller. Could this be due to claims
-			// being namespaced rather than cluster scoped?
 			for i := range l.Items {
 				if err := r.local.Delete(ctx, &l.Items[i]); rresource.IgnoreNotFound(err) != nil {
 					return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCR)
@@ -272,18 +273,30 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 	}
 
+	// After this point, we'll start operations that will need some cleanup
+	// if XRD is deleted such as CRD creation and controller initialization. So,
+	// we add a finalizer to make sure this Reconciler gets the chance to do
+	// the cleanup before the XRD disappears from the api-server.
 	if err := r.finalizer.AddFinalizer(ctx, xrd); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizerXRD)
 	}
 
+	// We'll create or update the CRD of the claim type in local cluster to make
+	// it available to users.
 	meta.AddOwnerReference(local, meta.AsController(meta.ReferenceTo(xrd, v1alpha1.CompositeResourceDefinitionGroupVersionKind)))
 	if err := r.local.Apply(ctx, local, rresource.MustBeControllableBy(xrd.GetUID())); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplyCRD)
 	}
 
+	// It takes a little while for Kubernetes API Server to establish the new API
+	// endpoints for the CRD. We'd like to make sure it's ready before starting
+	// its controller.
 	if !ccrd.IsEstablished(local.Status) {
 		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 	}
+
+	// The new controller for the type is configured with a reconciler and other
+	// parameters that the reconciler requires.
 	o := kcontroller.Options{Reconciler: claim.NewReconciler(r.mgr,
 		r.remote,
 		GroupVersionKindOf(*local),
@@ -291,15 +304,22 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		claim.WithRecorder(r.record.WithAnnotations("controller", cclaim.ControllerName(xrd.GetName()))),
 	)}
 
+	// Since we don't have strongly typed structs for the claims, we set the GVK
+	// of Unstructured object so that controller-runtime is able to get events
+	// of them via its unstructured client.
 	rq := &kunstructured.Unstructured{}
 	rq.SetGroupVersionKind(GroupVersionKindOf(*local))
 
+	// We're all set for starting the controller. This assumes that ControllerEngine
+	// Start call is idempotent, hence we don't check whether it was already started
+	// or not.
 	if err := r.engine.Start(cclaim.ControllerName(xrd.GetName()), o,
 		controller.For(rq, &handler.EnqueueRequestForObject{}),
 	); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errStartController)
 	}
 
+	// The reconciliation is completed successfully.
 	xrd.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
 	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 }
