@@ -42,7 +42,7 @@ import (
 	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
-	cclaim "github.com/crossplane/crossplane/pkg/controller/apiextensions/claim"
+	coreclaim "github.com/crossplane/crossplane/pkg/controller/apiextensions/claim"
 
 	"github.com/crossplane/agent/pkg/controllers/claim"
 )
@@ -225,7 +225,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 			// It's likely that we've already stopped this controller on a
 			// previous reconcile, but we try again just in case. This is a
 			// no-op if the controller was already stopped.
-			r.engine.Stop(cclaim.ControllerName(xrd.GetName()))
+			r.engine.Stop(coreclaim.ControllerName(xrd.GetName()))
 
 			if err := r.finalizer.RemoveFinalizer(ctx, xrd); err != nil {
 				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errRemoveFinalizer)
@@ -260,7 +260,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 		// The controller should be stopped before the deletion of CRD so that
 		// it doesn't crash.
-		r.engine.Stop(cclaim.ControllerName(xrd.GetName()))
+		r.engine.Stop(coreclaim.ControllerName(xrd.GetName()))
 
 		if err := r.local.Delete(ctx, localCRD); runtimeresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCRD)
@@ -300,8 +300,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	o := kcontroller.Options{Reconciler: claim.NewReconciler(r.mgr,
 		r.remote,
 		GroupVersionKindOf(*localCRD),
-		claim.WithLogger(log.WithValues("controller", cclaim.ControllerName(xrd.GetName()))),
-		claim.WithRecorder(r.record.WithAnnotations("controller", cclaim.ControllerName(xrd.GetName()))),
+		claim.WithLogger(log.WithValues("controller", coreclaim.ControllerName(xrd.GetName()))),
+		claim.WithRecorder(r.record.WithAnnotations("controller", coreclaim.ControllerName(xrd.GetName()))),
 	)}
 
 	// Since we don't have strongly typed structs for the claims, we set the GVK
@@ -313,7 +313,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// We're all set for starting the controller. This assumes that ControllerEngine
 	// Start call is idempotent, hence we don't check whether it was already started
 	// or not.
-	if err := r.engine.Start(cclaim.ControllerName(xrd.GetName()), o,
+	if err := r.engine.Start(coreclaim.ControllerName(xrd.GetName()), o,
 		controller.For(rq, &handler.EnqueueRequestForObject{}),
 	); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errStartController)
