@@ -202,7 +202,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// We will fetch the CRD of the claim that CompositeResourceDefinition offers
 	// and apply it in the local cluster so that we can start the sync controller
 	// targeting that type.
-	local, err := r.crd.Fetch(ctx, *xrd)
+	localCRD, err := r.crd.Fetch(ctx, *xrd)
 	if rresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errFetchCRD)
 	}
@@ -210,7 +210,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// In case XRD is deleted, we need to clean up the CRD and stop its controller.
 	if meta.WasDeleted(xrd) {
 		xrd.Status.SetConditions(v1alpha1.Deleting())
-		err := r.local.Get(ctx, GetClaimCRDName(*xrd), local)
+		err := r.local.Get(ctx, GetClaimCRDName(*xrd), localCRD)
 		if rresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
 		}
@@ -221,7 +221,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// creating it, or that we lost control of it around the same time we
 		// were deleted. In the (presumably exceedingly rare) latter case we'll
 		// orphan the CRD.
-		if !meta.WasCreated(local) || !metav1.IsControlledBy(local, xrd) {
+		if !meta.WasCreated(localCRD) || !metav1.IsControlledBy(localCRD, xrd) {
 			// It's likely that we've already stopped this controller on a
 			// previous reconcile, but we try again just in case. This is a
 			// no-op if the controller was already stopped.
@@ -237,7 +237,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		}
 
 		l := &kunstructured.UnstructuredList{}
-		l.SetGroupVersionKind(GroupVersionKindOf(*local))
+		l.SetGroupVersionKind(GroupVersionKindOf(*localCRD))
 		if err := r.local.List(ctx, l); rresource.Ignore(kmeta.IsNoMatchError, err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errListCR)
 		}
@@ -262,7 +262,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// it doesn't crash.
 		r.engine.Stop(cclaim.ControllerName(xrd.GetName()))
 
-		if err := r.local.Delete(ctx, local); rresource.IgnoreNotFound(err) != nil {
+		if err := r.local.Delete(ctx, localCRD); rresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCRD)
 		}
 
@@ -283,15 +283,15 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	// We'll create or update the CRD of the claim type in local cluster to make
 	// it available to users.
-	meta.AddOwnerReference(local, meta.AsController(meta.ReferenceTo(xrd, v1alpha1.CompositeResourceDefinitionGroupVersionKind)))
-	if err := r.local.Apply(ctx, local, rresource.MustBeControllableBy(xrd.GetUID())); err != nil {
+	meta.AddOwnerReference(localCRD, meta.AsController(meta.ReferenceTo(xrd, v1alpha1.CompositeResourceDefinitionGroupVersionKind)))
+	if err := r.local.Apply(ctx, localCRD, rresource.MustBeControllableBy(xrd.GetUID())); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplyCRD)
 	}
 
 	// It takes a little while for Kubernetes API Server to establish the new API
 	// endpoints for the CRD. We'd like to make sure it's ready before starting
 	// its controller.
-	if !ccrd.IsEstablished(local.Status) {
+	if !ccrd.IsEstablished(localCRD.Status) {
 		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 	}
 
@@ -299,7 +299,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// parameters that the reconciler requires.
 	o := kcontroller.Options{Reconciler: claim.NewReconciler(r.mgr,
 		r.remote,
-		GroupVersionKindOf(*local),
+		GroupVersionKindOf(*localCRD),
 		claim.WithLogger(log.WithValues("controller", cclaim.ControllerName(xrd.GetName()))),
 		claim.WithRecorder(r.record.WithAnnotations("controller", cclaim.ControllerName(xrd.GetName()))),
 	)}
@@ -308,7 +308,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// of Unstructured object so that controller-runtime is able to get events
 	// of them via its unstructured client.
 	rq := &kunstructured.Unstructured{}
-	rq.SetGroupVersionKind(GroupVersionKindOf(*local))
+	rq.SetGroupVersionKind(GroupVersionKindOf(*localCRD))
 
 	// We're all set for starting the controller. This assumes that ControllerEngine
 	// Start call is idempotent, hence we don't check whether it was already started

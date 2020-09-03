@@ -177,8 +177,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	// The reconciliation is triggered for the local claim instance, so, if it
 	// cannot be fetched for any reason, then that's a problem.
-	local := r.newInstance()
-	if err := r.local.Get(ctx, req.NamespacedName, local); err != nil {
+	localClaim := r.newInstance()
+	if err := r.local.Get(ctx, req.NamespacedName, localClaim); err != nil {
 		if kerrors.IsNotFound(err) {
 			return reconcile.Result{Requeue: false}, nil
 		}
@@ -188,86 +188,86 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// We fetch the remote claim instance that corresponds to this one and ignore
 	// the NotFound error since this pass could be the first one where the remote
 	// instance will be created.
-	remote := r.newInstance()
-	err := r.remote.Get(ctx, req.NamespacedName, remote)
+	remoteClaim := r.newInstance()
+	err := r.remote.Get(ctx, req.NamespacedName, remoteClaim)
 	if rresource.IgnoreNotFound(err) != nil {
 		log.Debug("Cannot get resource from remote", "error", err, "requeue-after", time.Now().Add(shortWait))
-		r.record.Event(local, event.Warning(reasonCannotGetFromRemote, err))
-		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errGetRequirement)))
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+		r.record.Event(localClaim, event.Warning(reasonCannotGetFromRemote, err))
+		localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errGetRequirement)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 	}
 
 	// If local claim instance is deleted, we need to clean up the remote instance
 	// before allowing it to disappear from api-server.
-	if meta.WasDeleted(local) {
+	if meta.WasDeleted(localClaim) {
 
 		// If the remote instance is already gone, then there is nothing else we
 		// need to clean up. The connection secret we created will be deleted by
 		// api-server once local instance is gone since we added our owner ref
 		// to it.
 		if kerrors.IsNotFound(err) {
-			if err := r.finalizer.RemoveFinalizer(ctx, local); err != nil {
+			if err := r.finalizer.RemoveFinalizer(ctx, localClaim); err != nil {
 				log.Debug("Cannot remove finalizer", "error", err, "requeue-after", time.Now().Add(shortWait))
-				r.record.Event(local, event.Warning(reasonCannotRemoveFinalizer, err))
-				local.SetConditions(resource.AgentSyncError(errors.Wrap(err, localPrefix+errRemoveFinalizer)))
-				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+				r.record.Event(localClaim, event.Warning(reasonCannotRemoveFinalizer, err))
+				localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, localPrefix+errRemoveFinalizer)))
+				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 			}
 			return reconcile.Result{}, nil
 		}
 
 		// Start the deletion of remote instance and if it's already gone, that's
 		// not an error since that's what we'd like to achieve.
-		if err := r.remote.Delete(ctx, remote); rresource.IgnoreNotFound(err) != nil {
+		if err := r.remote.Delete(ctx, remoteClaim); rresource.IgnoreNotFound(err) != nil {
 			log.Debug("Cannot delete local object", "error", err, "requeue-after", time.Now().Add(shortWait))
-			r.record.Event(local, event.Warning(reasonCannotDelete, err))
-			local.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errDeleteClaim)))
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+			r.record.Event(localClaim, event.Warning(reasonCannotDelete, err))
+			localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errDeleteClaim)))
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 		}
 
 		// We have requested the deletion of the remote instance but that doesn't
 		// meant it's gone. So, we'll requeue and remove the finalizer only if we
 		// confirm that remote instance no longer exists.
-		local.SetConditions(resource.AgentSyncSuccess().WithMessage("Deletion is successfully requested"))
-		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+		localClaim.SetConditions(resource.AgentSyncSuccess().WithMessage("Deletion is successfully requested"))
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 	}
 
 	// At this point, we will begin the operations that will need some cleanup in
 	// case of deletion, such as creation of remote correspondent. So, we add to a
 	// finalizer to local claim instance to block its deletion until this controller
 	// takes care of the cleanup.
-	if err := r.finalizer.AddFinalizer(ctx, local); err != nil {
+	if err := r.finalizer.AddFinalizer(ctx, localClaim); err != nil {
 		log.Debug("Cannot add finalizer", "error", err, "requeue-after", time.Now().Add(shortWait))
-		r.record.Event(local, event.Warning(reasonCannotAddFinalizer, err))
-		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, localPrefix+errAddFinalizer)))
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+		r.record.Event(localClaim, event.Warning(reasonCannotAddFinalizer, err))
+		localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, localPrefix+errAddFinalizer)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 	}
 
 	// At this point, we are getting remote instance ready for Apply operation
 	// by configuring its fields.
-	if err := r.Configure(ctx, local, remote); err != nil {
+	if err := r.Configure(ctx, localClaim, remoteClaim); err != nil {
 		log.Debug("Cannot run configurator", "error", err, "requeue-after", time.Now().Add(shortWait))
-		r.record.Event(local, event.Warning(reasonCannotConfigure, err))
-		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, errPush)))
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+		r.record.Event(localClaim, event.Warning(reasonCannotConfigure, err))
+		localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, errPush)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 	}
 
 	// We create/update the final form of the instance in the remote cluster.
-	if err := r.remote.Apply(ctx, remote); err != nil {
+	if err := r.remote.Apply(ctx, remoteClaim); err != nil {
 		log.Debug("Cannot call Apply", "error", err, "requeue-after", time.Now().Add(shortWait))
-		r.record.Event(local, event.Warning(reasonCannotApply, err))
-		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, errApplyClaim)))
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+		r.record.Event(localClaim, event.Warning(reasonCannotApply, err))
+		localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, errApplyClaim)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 	}
 
 	// At this point, we have the remote instance in the remote cluster and the
 	// variable "remote" is updated. So, we will propagate new information from
 	// "remote" to "local"
-	if err := r.Propagate(ctx, local, remote); err != nil {
+	if err := r.Propagate(ctx, localClaim, remoteClaim); err != nil {
 		log.Debug("Cannot run propagator", "error", err, "requeue-after", time.Now().Add(shortWait))
-		r.record.Event(local, event.Warning(reasonCannotPropagate, err))
-		local.SetConditions(resource.AgentSyncError(errors.Wrap(err, errPull)))
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, local), errStatusUpdateClaim)
+		r.record.Event(localClaim, event.Warning(reasonCannotPropagate, err))
+		localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, errPull)))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), errStatusUpdateClaim)
 	}
-	local.SetConditions(resource.AgentSyncSuccess())
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, local), localPrefix+errStatusUpdateClaim)
+	localClaim.SetConditions(resource.AgentSyncSuccess())
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, localClaim), localPrefix+errStatusUpdateClaim)
 }

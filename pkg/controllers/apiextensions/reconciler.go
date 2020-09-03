@@ -142,20 +142,20 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	crd := &v1beta1.CustomResourceDefinition{}
-	if err := r.local.Get(ctx, r.crdName, crd); err != nil {
+	localCRD := &v1beta1.CustomResourceDefinition{}
+	if err := r.local.Get(ctx, r.crdName, localCRD); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
 	}
-	if !ccrd.IsEstablished(crd.Status) {
+	if !ccrd.IsEstablished(localCRD.Status) {
 		return reconcile.Result{RequeueAfter: tinyWait}, nil
 	}
 
-	ro := r.newObject()
-	if err := r.remote.Get(ctx, req.NamespacedName, ro); err != nil {
+	remoteObject := r.newObject()
+	if err := r.remote.Get(ctx, req.NamespacedName, remoteObject); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
 	}
-	lo := resource.SanitizedDeepCopyObject(ro)
-	if err := r.local.Apply(ctx, lo); err != nil {
+	localObject := resource.SanitizedDeepCopyObject(remoteObject)
+	if err := r.local.Apply(ctx, localObject); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
 	}
 	// TODO(muvaf): We need to call status update to bring the status subresource

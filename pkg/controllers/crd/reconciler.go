@@ -114,11 +114,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	crd := &v1beta1.CustomResourceDefinition{}
-	if err := r.remote.Get(ctx, req.NamespacedName, crd); err != nil {
+	remoteCRD := &v1beta1.CustomResourceDefinition{}
+	if err := r.remote.Get(ctx, req.NamespacedName, remoteCRD); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetCRD)
 	}
 	// TODO(muvaf): Set condition on local CRD to tell when is the last time
 	// it's been synced.
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, resource.SanitizedDeepCopyObject(crd)), local+errApplyCRD)
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, resource.SanitizedDeepCopyObject(remoteCRD)), local+errApplyCRD)
 }
