@@ -31,7 +31,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
 
 	"github.com/crossplane/agent/pkg/resource"
@@ -46,10 +46,10 @@ const (
 	localPrefix          = "local cluster: "
 	remotePrefix         = "remote cluster: "
 	errGetCRD            = "cannot get custom resource definition"
-	errGetInstanceFmt    = "cannot get %s instance"
-	errListInstanceFmt   = "cannot list %s instances"
-	errDeleteInstanceFmt = "cannot delete %s instance"
-	errApplyInstanceFmt  = "cannot apply %s instance"
+	errFmtGetInstance    = "cannot get %s instance"
+	errFmtListInstance   = "cannot list %s instances"
+	errFmtDeleteInstance = "cannot delete %s instance"
+	errFmtApplyInstance  = "cannot apply %s instance"
 )
 
 // ReconcilerOption is used to configure the Reconciler.
@@ -65,7 +65,7 @@ func WithNewObjectListFn(f func() runtime.Object) ReconcilerOption {
 
 // WithNewInstanceFn specifies the function to be used to initialize an empty
 // object whose type is being reconciled by this Reconciler.
-func WithNewInstanceFn(f func() rresource.Object) ReconcilerOption {
+func WithNewInstanceFn(f func() runtimeresource.Object) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.newObject = f
 	}
@@ -73,7 +73,7 @@ func WithNewInstanceFn(f func() rresource.Object) ReconcilerOption {
 
 // WithGetItemsFn specifies the function that will be used to retrieve an array
 // of objects from the object list.
-func WithGetItemsFn(f func(l runtime.Object) []rresource.Object) ReconcilerOption {
+func WithGetItemsFn(f func(l runtime.Object) []runtimeresource.Object) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.getItems = f
 	}
@@ -102,12 +102,12 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 }
 
 // NewReconciler returns a new *Reconciler object.
-func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientApplicator, opts ...ReconcilerOption) *Reconciler {
+func NewReconciler(mgr manager.Manager, localClient runtimeresource.ClientApplicator, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		mgr:    mgr,
 		log:    logging.NewNopLogger(),
 		remote: mgr.GetClient(),
-		local:  localClientApplicator,
+		local:  localClient,
 	}
 
 	for _, f := range opts {
@@ -122,13 +122,13 @@ func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientAp
 // always overrides the changes made to those Custom Resources in the local cluster.
 type Reconciler struct {
 	remote client.Client
-	local  rresource.ClientApplicator
+	local  runtimeresource.ClientApplicator
 	mgr    manager.Manager
 
 	crdName       types.NamespacedName
 	newObjectList func() runtime.Object
-	getItems      func(l runtime.Object) []rresource.Object
-	newObject     func() rresource.Object
+	getItems      func(l runtime.Object) []runtimeresource.Object
+	newObject     func() runtimeresource.Object
 
 	log    logging.Logger
 	record event.Recorder
@@ -152,11 +152,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 	remoteObject := r.newObject()
 	if err := r.remote.Get(ctx, req.NamespacedName, remoteObject); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errGetInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errFmtGetInstance, r.crdName.Name))
 	}
 	localObject := resource.SanitizedDeepCopyObject(remoteObject)
 	if err := r.local.Apply(ctx, localObject); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errApplyInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errFmtApplyInstance, r.crdName.Name))
 	}
 	// TODO(muvaf): We need to call status update to bring the status subresource
 	// of the resources.
@@ -169,14 +169,14 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	removalList := map[string]bool{}
 	ll := r.newObjectList()
 	if err := r.local.List(ctx, ll); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errFmtListInstance, r.crdName.Name))
 	}
 	for _, obj := range r.getItems(ll) {
 		removalList[obj.GetName()] = true
 	}
 	rl := r.newObjectList()
 	if err := r.remote.List(ctx, rl); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errListInstanceFmt, r.crdName.Name))
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+fmt.Sprintf(errFmtListInstance, r.crdName.Name))
 	}
 	for _, obj := range r.getItems(rl) {
 		delete(removalList, obj.GetName())
@@ -184,8 +184,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	for remove := range removalList {
 		obj := r.newObject()
 		obj.SetName(remove)
-		if err := r.local.Delete(ctx, obj); rresource.IgnoreNotFound(err) != nil {
-			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errDeleteInstanceFmt, r.crdName.Name))
+		if err := r.local.Delete(ctx, obj); runtimeresource.IgnoreNotFound(err) != nil {
+			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+fmt.Sprintf(errFmtDeleteInstance, r.crdName.Name))
 		}
 	}
 	return reconcile.Result{RequeueAfter: longWait}, nil

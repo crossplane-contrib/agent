@@ -30,7 +30,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/apis/core/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 
 	"github.com/crossplane/agent/pkg/resource"
@@ -128,7 +128,7 @@ type StatusPropagator struct{}
 func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
 	status, err := fieldpath.Pave(remote.GetUnstructured().UnstructuredContent()).GetValue("status")
 	if err != nil {
-		return rresource.Ignore(fieldpath.IsNotFound, err)
+		return runtimeresource.Ignore(fieldpath.IsNotFound, err)
 	}
 	statusJSON, err := json.Marshal(status)
 	if err != nil {
@@ -144,15 +144,15 @@ func (sp *StatusPropagator) Propagate(ctx context.Context, local, remote *claim.
 }
 
 // NewConnectionSecretPropagator returns a new *ConnectionSecretPropagator.
-func NewConnectionSecretPropagator(local, remote rresource.ClientApplicator) *ConnectionSecretPropagator {
+func NewConnectionSecretPropagator(local, remote runtimeresource.ClientApplicator) *ConnectionSecretPropagator {
 	return &ConnectionSecretPropagator{localClient: local, remoteClient: remote}
 }
 
 // ConnectionSecretPropagator fetches the connection secret from the remote cluster
 // and applies it in the local cluster.
 type ConnectionSecretPropagator struct {
-	localClient  rresource.ClientApplicator
-	remoteClient rresource.ClientApplicator
+	localClient  runtimeresource.ClientApplicator
+	remoteClient runtimeresource.ClientApplicator
 }
 
 // Propagate propagates the connection secret from remote cluster to local cluster.
@@ -167,7 +167,7 @@ func (csp *ConnectionSecretPropagator) Propagate(ctx context.Context, local, rem
 		Namespace: remote.GetNamespace(),
 	}
 	err := csp.remoteClient.Get(ctx, rnn, rs)
-	if rresource.IgnoreNotFound(err) != nil {
+	if runtimeresource.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, remotePrefix+errGetSecret)
 	}
 	if kerrors.IsNotFound(err) {

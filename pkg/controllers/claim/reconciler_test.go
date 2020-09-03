@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
@@ -118,7 +118,7 @@ func TestReconcile(t *testing.T) {
 				},
 				remote: &test.MockClient{MockGet: test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, ""))},
 				opts: []ReconcilerOption{
-					WithFinalizer(rresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ rresource.Object) error {
+					WithFinalizer(runtimeresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
 						return nil
 					}}),
 				},
@@ -151,7 +151,7 @@ func TestReconcile(t *testing.T) {
 					MockGet: test.NewMockGetFn(kerrors.NewNotFound(schema.GroupResource{}, "")),
 				},
 				opts: []ReconcilerOption{
-					WithFinalizer(rresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ rresource.Object) error {
+					WithFinalizer(runtimeresource.FinalizerFns{RemoveFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
 						return errBoom
 					}}),
 				},
@@ -187,7 +187,7 @@ func TestReconcile(t *testing.T) {
 					MockDelete: test.NewMockDeleteFn(errBoom),
 				},
 				opts: []ReconcilerOption{
-					WithFinalizer(rresource.FinalizerFns{}),
+					WithFinalizer(runtimeresource.FinalizerFns{}),
 				},
 			},
 			want: want{
@@ -221,7 +221,7 @@ func TestReconcile(t *testing.T) {
 					MockDelete: test.NewMockDeleteFn(nil),
 				},
 				opts: []ReconcilerOption{
-					WithFinalizer(rresource.FinalizerFns{}),
+					WithFinalizer(runtimeresource.FinalizerFns{}),
 				},
 			},
 			want: want{
@@ -247,7 +247,7 @@ func TestReconcile(t *testing.T) {
 				},
 				remote: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				opts: []ReconcilerOption{
-					WithFinalizer(rresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ rresource.Object) error {
+					WithFinalizer(runtimeresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
 						return errBoom
 					}}),
 				},
@@ -275,7 +275,7 @@ func TestReconcile(t *testing.T) {
 				},
 				remote: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				opts: []ReconcilerOption{
-					WithFinalizer(rresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ rresource.Object) error {
+					WithFinalizer(runtimeresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
 						return nil
 					}}),
 					WithPropagator(PropagateFn(func(_ context.Context, _, _ *claim.Unstructured) error {
@@ -306,7 +306,7 @@ func TestReconcile(t *testing.T) {
 				},
 				remote: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				opts: []ReconcilerOption{
-					WithFinalizer(rresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ rresource.Object) error {
+					WithFinalizer(runtimeresource.FinalizerFns{AddFinalizerFn: func(_ context.Context, _ runtimeresource.Object) error {
 						return nil
 					}}),
 					WithPropagator(PropagateFn(func(_ context.Context, _, _ *claim.Unstructured) error {

@@ -31,7 +31,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/claim"
 
@@ -88,7 +88,7 @@ func WithRecorder(rec event.Recorder) ReconcilerOption {
 }
 
 // WithFinalizer specifies how the Reconciler should add and remove finalizers.
-func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
+func WithFinalizer(f runtimeresource.Finalizer) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.finalizer = f
 	}
@@ -109,14 +109,14 @@ type ReconcilerOption func(*Reconciler)
 func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.GroupVersionKind, opts ...ReconcilerOption) *Reconciler {
 	ni := func() *claim.Unstructured { return claim.New(claim.WithGroupVersionKind(gvk)) }
 	lc := unstructured.NewClient(mgr.GetClient())
-	lca := rresource.ClientApplicator{
+	lca := runtimeresource.ClientApplicator{
 		Client:     lc,
-		Applicator: rresource.NewAPIPatchingApplicator(lc),
+		Applicator: runtimeresource.NewAPIPatchingApplicator(lc),
 	}
 	rc := unstructured.NewClient(remoteClient)
-	rca := rresource.ClientApplicator{
+	rca := runtimeresource.ClientApplicator{
 		Client:     rc,
-		Applicator: rresource.NewAPIPatchingApplicator(rc),
+		Applicator: runtimeresource.NewAPIPatchingApplicator(rc),
 	}
 	r := &Reconciler{
 		mgr:          mgr,
@@ -124,7 +124,7 @@ func NewReconciler(mgr manager.Manager, remoteClient client.Client, gvk schema.G
 		remote:       rca,
 		newInstance:  ni,
 		log:          logging.NewNopLogger(),
-		finalizer:    rresource.NewAPIFinalizer(lc, finalizer),
+		finalizer:    runtimeresource.NewAPIFinalizer(lc, finalizer),
 		Configurator: NewDefaultConfigurator(),
 		Propagator: NewPropagatorChain(
 			NewLateInitializer(lc),
@@ -154,12 +154,12 @@ type Propagator interface {
 // cluster and fetches its connection secret to local cluster if it's available.
 type Reconciler struct {
 	mgr    ctrl.Manager
-	local  rresource.ClientApplicator
-	remote rresource.ClientApplicator
+	local  runtimeresource.ClientApplicator
+	remote runtimeresource.ClientApplicator
 
 	newInstance func() *claim.Unstructured
 
-	finalizer rresource.Finalizer
+	finalizer runtimeresource.Finalizer
 	Configurator
 	Propagator
 
@@ -190,7 +190,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// instance will be created.
 	remoteClaim := r.newInstance()
 	err := r.remote.Get(ctx, req.NamespacedName, remoteClaim)
-	if rresource.IgnoreNotFound(err) != nil {
+	if runtimeresource.IgnoreNotFound(err) != nil {
 		log.Debug("Cannot get resource from remote", "error", err, "requeue-after", time.Now().Add(shortWait))
 		r.record.Event(localClaim, event.Warning(reasonCannotGetFromRemote, err))
 		localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errGetRequirement)))
@@ -217,7 +217,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 		// Start the deletion of remote instance and if it's already gone, that's
 		// not an error since that's what we'd like to achieve.
-		if err := r.remote.Delete(ctx, remoteClaim); rresource.IgnoreNotFound(err) != nil {
+		if err := r.remote.Delete(ctx, remoteClaim); runtimeresource.IgnoreNotFound(err) != nil {
 			log.Debug("Cannot delete local object", "error", err, "requeue-after", time.Now().Add(shortWait))
 			r.record.Event(localClaim, event.Warning(reasonCannotDelete, err))
 			localClaim.SetConditions(resource.AgentSyncError(errors.Wrap(err, remotePrefix+errDeleteClaim)))

@@ -39,7 +39,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
 	cclaim "github.com/crossplane/crossplane/pkg/controller/apiextensions/claim"
@@ -95,7 +95,7 @@ func WithControllerEngine(c ControllerEngine) ReconcilerOption {
 }
 
 // WithFinalizer specifies how the Reconciler should add and remove finalizers.
-func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
+func WithFinalizer(f runtimeresource.Finalizer) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.finalizer = f
 	}
@@ -110,7 +110,7 @@ func WithCRDFetcher(re CRDFetcher) ReconcilerOption {
 
 // WithLocalApplicator specifies what Applicator in local cluster Reconciler
 // should use.
-func WithLocalApplicator(a rresource.Applicator) ReconcilerOption {
+func WithLocalApplicator(a runtimeresource.Applicator) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.local.Applicator = a
 	}
@@ -137,14 +137,14 @@ type ReconcilerOption func(*Reconciler)
 func NewReconciler(mgr manager.Manager, remoteClient client.Client, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		mgr: mgr,
-		local: rresource.ClientApplicator{
+		local: runtimeresource.ClientApplicator{
 			Client:     mgr.GetClient(),
-			Applicator: rresource.NewAPIUpdatingApplicator(mgr.GetClient()),
+			Applicator: runtimeresource.NewAPIUpdatingApplicator(mgr.GetClient()),
 		},
 		remote:    remoteClient,
 		engine:    controller.NewEngine(mgr),
 		crd:       NewNopFetcher(),
-		finalizer: rresource.NewAPIFinalizer(mgr.GetClient(), finalizer),
+		finalizer: runtimeresource.NewAPIFinalizer(mgr.GetClient(), finalizer),
 		log:       logging.NewNopLogger(),
 		record:    event.NewNopRecorder(),
 	}
@@ -172,12 +172,12 @@ type CRDFetcher interface {
 // will sync the instances of that type from local cluster to remote cluster.
 type Reconciler struct {
 	mgr    ctrl.Manager
-	local  rresource.ClientApplicator
+	local  runtimeresource.ClientApplicator
 	remote client.Client
 
 	crd       CRDFetcher
 	engine    ControllerEngine
-	finalizer rresource.Finalizer
+	finalizer runtimeresource.Finalizer
 
 	log    logging.Logger
 	record event.Recorder
@@ -195,7 +195,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	defer cancel()
 
 	xrd := &v1alpha1.CompositeResourceDefinition{}
-	if err := r.local.Get(ctx, req.NamespacedName, xrd); rresource.IgnoreNotFound(err) != nil {
+	if err := r.local.Get(ctx, req.NamespacedName, xrd); runtimeresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetXRD)
 	}
 
@@ -203,7 +203,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// and apply it in the local cluster so that we can start the sync controller
 	// targeting that type.
 	localCRD, err := r.crd.Fetch(ctx, *xrd)
-	if rresource.IgnoreNotFound(err) != nil {
+	if runtimeresource.IgnoreNotFound(err) != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errFetchCRD)
 	}
 
@@ -211,7 +211,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	if meta.WasDeleted(xrd) {
 		xrd.Status.SetConditions(v1alpha1.Deleting())
 		err := r.local.Get(ctx, GetClaimCRDName(*xrd), localCRD)
-		if rresource.IgnoreNotFound(err) != nil {
+		if runtimeresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
 		}
 
@@ -238,7 +238,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 
 		l := &kunstructured.UnstructuredList{}
 		l.SetGroupVersionKind(GroupVersionKindOf(*localCRD))
-		if err := r.local.List(ctx, l); rresource.Ignore(kmeta.IsNoMatchError, err) != nil {
+		if err := r.local.List(ctx, l); runtimeresource.Ignore(kmeta.IsNoMatchError, err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errListCR)
 		}
 
@@ -247,7 +247,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// controller has a chance to execute its cleanup logic, if any.
 		if len(l.Items) > 0 {
 			for i := range l.Items {
-				if err := r.local.Delete(ctx, &l.Items[i]); rresource.IgnoreNotFound(err) != nil {
+				if err := r.local.Delete(ctx, &l.Items[i]); runtimeresource.IgnoreNotFound(err) != nil {
 					return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCR)
 				}
 			}
@@ -262,7 +262,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// it doesn't crash.
 		r.engine.Stop(cclaim.ControllerName(xrd.GetName()))
 
-		if err := r.local.Delete(ctx, localCRD); rresource.IgnoreNotFound(err) != nil {
+		if err := r.local.Delete(ctx, localCRD); runtimeresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCRD)
 		}
 
@@ -284,7 +284,7 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	// We'll create or update the CRD of the claim type in local cluster to make
 	// it available to users.
 	meta.AddOwnerReference(localCRD, meta.AsController(meta.ReferenceTo(xrd, v1alpha1.CompositeResourceDefinitionGroupVersionKind)))
-	if err := r.local.Apply(ctx, localCRD, rresource.MustBeControllableBy(xrd.GetUID())); err != nil {
+	if err := r.local.Apply(ctx, localCRD, runtimeresource.MustBeControllableBy(xrd.GetUID())); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplyCRD)
 	}
 

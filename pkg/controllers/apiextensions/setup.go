@@ -23,7 +23,7 @@ import (
 	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
@@ -40,19 +40,19 @@ func SetupXRDSync(mgr ctrl.Manager, localClient client.Client, log logging.Logge
 	name := "CompositeResourceDefinitions"
 
 	nl := func() runtime.Object { return &v1alpha1.CompositeResourceDefinitionList{} }
-	gi := func(l runtime.Object) []rresource.Object {
+	gi := func(l runtime.Object) []runtimeresource.Object {
 		list, _ := l.(*v1alpha1.CompositeResourceDefinitionList)
-		result := make([]rresource.Object, len(list.Items))
+		result := make([]runtimeresource.Object, len(list.Items))
 		for i, val := range list.Items {
-			obj, _ := val.DeepCopyObject().(rresource.Object)
+			obj, _ := val.DeepCopyObject().(runtimeresource.Object)
 			result[i] = obj
 		}
 		return result
 	}
-	ni := func() rresource.Object { return &v1alpha1.CompositeResourceDefinition{} }
-	ca := rresource.ClientApplicator{
+	ni := func() runtimeresource.Object { return &v1alpha1.CompositeResourceDefinition{} }
+	ca := runtimeresource.ClientApplicator{
 		Client:     localClient,
-		Applicator: rresource.NewAPIPatchingApplicator(localClient),
+		Applicator: runtimeresource.NewAPIPatchingApplicator(localClient),
 	}
 
 	r := NewReconciler(mgr,
@@ -76,19 +76,19 @@ func SetupCompositionSync(mgr ctrl.Manager, localClient client.Client, log loggi
 	name := "Compositions"
 
 	nl := func() runtime.Object { return &v1alpha1.CompositionList{} }
-	gi := func(l runtime.Object) []rresource.Object {
+	gi := func(l runtime.Object) []runtimeresource.Object {
 		list, _ := l.(*v1alpha1.CompositionList)
-		result := make([]rresource.Object, len(list.Items))
+		result := make([]runtimeresource.Object, len(list.Items))
 		for i, val := range list.Items {
-			obj, _ := val.DeepCopyObject().(rresource.Object)
+			obj, _ := val.DeepCopyObject().(runtimeresource.Object)
 			result[i] = obj
 		}
 		return result
 	}
-	ni := func() rresource.Object { return &v1alpha1.Composition{} }
-	ca := rresource.ClientApplicator{
+	ni := func() runtimeresource.Object { return &v1alpha1.Composition{} }
+	ca := runtimeresource.ClientApplicator{
 		Client:     localClient,
-		Applicator: rresource.NewAPIPatchingApplicator(localClient),
+		Applicator: runtimeresource.NewAPIPatchingApplicator(localClient),
 	}
 
 	r := NewReconciler(mgr,

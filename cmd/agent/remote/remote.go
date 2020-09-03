@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	capiextensions "github.com/crossplane/crossplane/apis/apiextensions"
+	capiextensions "github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 
 	"github.com/crossplane/agent/pkg/controllers/apiextensions"
 	"github.com/crossplane/agent/pkg/controllers/crd"
@@ -36,7 +36,6 @@ import (
 // Agent configures & starts the manager that is watching the remote cluster.
 type Agent struct {
 	ClusterConfig *rest.Config
-	DefaultConfig *rest.Config
 }
 
 // Run adds all controllers and starts the manager that watches the remote cluster.
@@ -57,7 +56,7 @@ func (a *Agent) Run(log logging.Logger, period time.Duration) error {
 		return errors.Wrap(err, "Cannot add CustomResourceDefinition API to scheme")
 	}
 
-	if err := capiextensions.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := capiextensions.SchemeBuilder.AddToScheme(mgr.GetScheme()); err != nil {
 		return errors.Wrap(err, "Cannot add Crossplane apiextensions API to scheme")
 	}
 

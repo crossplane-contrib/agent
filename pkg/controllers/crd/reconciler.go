@@ -31,7 +31,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplane/agent/pkg/resource"
 )
@@ -63,9 +63,9 @@ const (
 // cluster and replicates them in the local cluster.
 func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger) error {
 	name := "CustomResourceDefinitions"
-	ca := rresource.ClientApplicator{
+	ca := runtimeresource.ClientApplicator{
 		Client:     localClient,
-		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+		Applicator: runtimeresource.NewAPIUpdatingApplicator(localClient),
 	}
 	r := NewReconciler(mgr, ca, logger)
 	return ctrl.NewControllerManagedBy(mgr).
@@ -80,7 +80,7 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 }
 
 // NewReconciler returns a new *Reconciler.
-func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientApplicator, logger logging.Logger) *Reconciler {
+func NewReconciler(mgr manager.Manager, localClientApplicator runtimeresource.ClientApplicator, logger logging.Logger) *Reconciler {
 	return &Reconciler{
 		mgr:    mgr,
 		local:  localClientApplicator,
@@ -99,7 +99,7 @@ func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientAp
 // an EventFilter to filter only the CRDs you'd like to be synced.
 type Reconciler struct {
 	mgr    ctrl.Manager
-	local  rresource.ClientApplicator
+	local  runtimeresource.ClientApplicator
 	remote client.Client
 
 	log    logging.Logger

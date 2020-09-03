@@ -70,7 +70,6 @@ func main() {
 	case "remote":
 		agent := &remote.Agent{
 			ClusterConfig: clusterConfig,
-			DefaultConfig: defaultConfig,
 		}
 		kingpin.FatalIfError(agent.Run(logging.NewLogrLogger(zl.WithName("crossplane-agent")), duration), "cannot run agent in remote mode")
 	}

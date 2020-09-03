@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/pkg/resource/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/test"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
@@ -40,16 +40,16 @@ var (
 	errBoom = errors.New("boom")
 
 	nl = func() runtime.Object { return &v1alpha1.CompositionList{} }
-	gi = func(l runtime.Object) []rresource.Object {
+	gi = func(l runtime.Object) []runtimeresource.Object {
 		list, _ := l.(*v1alpha1.CompositionList)
-		result := make([]rresource.Object, len(list.Items))
+		result := make([]runtimeresource.Object, len(list.Items))
 		for i, val := range list.Items {
-			obj, _ := val.DeepCopyObject().(rresource.Object)
+			obj, _ := val.DeepCopyObject().(runtimeresource.Object)
 			result[i] = obj
 		}
 		return result
 	}
-	ni = func() rresource.Object { return &v1alpha1.Composition{} }
+	ni = func() runtimeresource.Object { return &v1alpha1.Composition{} }
 
 	established = apiextensions.CustomResourceDefinition{
 		Status: apiextensions.CustomResourceDefinitionStatus{
@@ -66,7 +66,7 @@ var (
 func Test_Reconcile(t *testing.T) {
 	type args struct {
 		m     manager.Manager
-		local rresource.ClientApplicator
+		local runtimeresource.ClientApplicator
 	}
 	type want struct {
 		result reconcile.Result
@@ -82,7 +82,7 @@ func Test_Reconcile(t *testing.T) {
 			reason: "An error should be returned if CRD in local cannot be retrieved",
 			args: args{
 				m: &fake.Manager{},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{MockGet: test.NewMockGetFn(errBoom)},
 				},
 			},
@@ -95,7 +95,7 @@ func Test_Reconcile(t *testing.T) {
 			reason: "No error should be returned if CRD in local is not established yet",
 			args: args{
 				m: &fake.Manager{},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{MockGet: test.NewMockGetFn(nil)},
 				},
 			},
@@ -111,7 +111,7 @@ func Test_Reconcile(t *testing.T) {
 						MockGet: test.NewMockGetFn(errBoom),
 					},
 				},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 							o := obj.(*apiextensions.CustomResourceDefinition)
@@ -122,7 +122,7 @@ func Test_Reconcile(t *testing.T) {
 				},
 			},
 			want: want{
-				err:    errors.Wrap(errBoom, remotePrefix+fmt.Sprintf(errGetInstanceFmt, compositionCRDName)),
+				err:    errors.Wrap(errBoom, remotePrefix+fmt.Sprintf(errFmtGetInstance, compositionCRDName)),
 				result: reconcile.Result{RequeueAfter: shortWait},
 			},
 		},
@@ -134,7 +134,7 @@ func Test_Reconcile(t *testing.T) {
 						MockGet: test.NewMockGetFn(nil),
 					},
 				},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 							if o, ok := obj.(*apiextensions.CustomResourceDefinition); ok {
@@ -143,13 +143,13 @@ func Test_Reconcile(t *testing.T) {
 							return nil
 						},
 					},
-					Applicator: rresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...rresource.ApplyOption) error {
+					Applicator: runtimeresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...runtimeresource.ApplyOption) error {
 						return errBoom
 					}),
 				},
 			},
 			want: want{
-				err:    errors.Wrap(errBoom, localPrefix+fmt.Sprintf(errApplyInstanceFmt, compositionCRDName)),
+				err:    errors.Wrap(errBoom, localPrefix+fmt.Sprintf(errFmtApplyInstance, compositionCRDName)),
 				result: reconcile.Result{RequeueAfter: shortWait},
 			},
 		},
@@ -161,7 +161,7 @@ func Test_Reconcile(t *testing.T) {
 						MockGet: test.NewMockGetFn(nil),
 					},
 				},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 							if o, ok := obj.(*apiextensions.CustomResourceDefinition); ok {
@@ -172,13 +172,13 @@ func Test_Reconcile(t *testing.T) {
 						MockUpdate: test.NewMockUpdateFn(nil),
 						MockList:   test.NewMockListFn(errBoom),
 					},
-					Applicator: rresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...rresource.ApplyOption) error {
+					Applicator: runtimeresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...runtimeresource.ApplyOption) error {
 						return nil
 					}),
 				},
 			},
 			want: want{
-				err:    errors.Wrap(errBoom, localPrefix+fmt.Sprintf(errListInstanceFmt, compositionCRDName)),
+				err:    errors.Wrap(errBoom, localPrefix+fmt.Sprintf(errFmtListInstance, compositionCRDName)),
 				result: reconcile.Result{RequeueAfter: shortWait},
 			},
 		},
@@ -191,7 +191,7 @@ func Test_Reconcile(t *testing.T) {
 						MockList: test.NewMockListFn(errBoom),
 					},
 				},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 							if o, ok := obj.(*apiextensions.CustomResourceDefinition); ok {
@@ -202,13 +202,13 @@ func Test_Reconcile(t *testing.T) {
 						MockUpdate: test.NewMockUpdateFn(nil),
 						MockList:   test.NewMockListFn(nil),
 					},
-					Applicator: rresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...rresource.ApplyOption) error {
+					Applicator: runtimeresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...runtimeresource.ApplyOption) error {
 						return nil
 					}),
 				},
 			},
 			want: want{
-				err:    errors.Wrap(errBoom, remotePrefix+fmt.Sprintf(errListInstanceFmt, compositionCRDName)),
+				err:    errors.Wrap(errBoom, remotePrefix+fmt.Sprintf(errFmtListInstance, compositionCRDName)),
 				result: reconcile.Result{RequeueAfter: shortWait},
 			},
 		},
@@ -221,7 +221,7 @@ func Test_Reconcile(t *testing.T) {
 						MockList: test.NewMockListFn(nil),
 					},
 				},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 							if o, ok := obj.(*apiextensions.CustomResourceDefinition); ok {
@@ -237,13 +237,13 @@ func Test_Reconcile(t *testing.T) {
 						},
 						MockDelete: test.NewMockDeleteFn(errBoom),
 					},
-					Applicator: rresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...rresource.ApplyOption) error {
+					Applicator: runtimeresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...runtimeresource.ApplyOption) error {
 						return nil
 					}),
 				},
 			},
 			want: want{
-				err:    errors.Wrap(errBoom, localPrefix+fmt.Sprintf(errDeleteInstanceFmt, compositionCRDName)),
+				err:    errors.Wrap(errBoom, localPrefix+fmt.Sprintf(errFmtDeleteInstance, compositionCRDName)),
 				result: reconcile.Result{RequeueAfter: shortWait},
 			},
 		},
@@ -266,7 +266,7 @@ func Test_Reconcile(t *testing.T) {
 						},
 					},
 				},
-				local: rresource.ClientApplicator{
+				local: runtimeresource.ClientApplicator{
 					Client: &test.MockClient{
 						MockGet: func(_ context.Context, _ client.ObjectKey, obj runtime.Object) error {
 							if o, ok := obj.(*apiextensions.CustomResourceDefinition); ok {
@@ -299,7 +299,7 @@ func Test_Reconcile(t *testing.T) {
 							return nil
 						},
 					},
-					Applicator: rresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...rresource.ApplyOption) error {
+					Applicator: runtimeresource.ApplyFn(func(_ context.Context, _ runtime.Object, _ ...runtimeresource.ApplyOption) error {
 						return nil
 					}),
 				},
