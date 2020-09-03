@@ -62,19 +62,17 @@ func (pp PropagatorChain) Propagate(ctx context.Context, local, remote *claim.Un
 	return nil
 }
 
-// NewSpecPropagator returns a new SpecPropagator.
-func NewSpecPropagator(kube rresource.ClientApplicator) *SpecPropagator {
-	return &SpecPropagator{remoteClient: kube}
+// NewDefaultConfigurator returns a new DefaultConfigurator.
+func NewDefaultConfigurator() *DefaultConfigurator {
+	return &DefaultConfigurator{}
 }
 
-// SpecPropagator blindly propagates all spec fields of "from" object to
-// "to" object.
-type SpecPropagator struct {
-	remoteClient rresource.ClientApplicator
-}
+// DefaultConfigurator configures ObjectMeta and Spec of the remote instance with
+// the information from the local instance.
+type DefaultConfigurator struct{}
 
-// Propagate copies spec from one object to the other.
-func (sp *SpecPropagator) Propagate(ctx context.Context, local, remote *claim.Unstructured) error {
+// Configure copies spec and user-defined metadata from local object to the remote one.
+func (sp *DefaultConfigurator) Configure(_ context.Context, local, remote *claim.Unstructured) error {
 	remote.SetName(local.GetName())
 	remote.SetNamespace(local.GetNamespace())
 	remote.SetAnnotations(local.GetAnnotations())
@@ -83,10 +81,8 @@ func (sp *SpecPropagator) Propagate(ctx context.Context, local, remote *claim.Un
 	if err != nil {
 		return err
 	}
-	if err := fieldpath.Pave(remote.GetUnstructured().UnstructuredContent()).SetValue("spec", spec); err != nil {
-		return err
-	}
-	return errors.Wrap(sp.remoteClient.Apply(ctx, remote), remotePrefix+errApplyRequirement)
+	err = fieldpath.Pave(remote.GetUnstructured().UnstructuredContent()).SetValue("spec", spec)
+	return err
 }
 
 // NewLateInitializer returns a new LateInitializer.
@@ -117,7 +113,7 @@ func (li *LateInitializer) Propagate(ctx context.Context, local, remote *claim.U
 		local.SetWriteConnectionSecretToReference(remote.GetWriteConnectionSecretToReference())
 	}
 	// TODO(muvaf): We need to late-init the unknown user-defined fields as well.
-	return errors.Wrap(li.localClient.Update(ctx, local), localPrefix+errUpdateRequirement)
+	return errors.Wrap(li.localClient.Update(ctx, local), localPrefix+errUpdateClaim)
 }
 
 // NewStatusPropagator returns a new StatusPropagator.

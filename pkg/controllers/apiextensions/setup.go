@@ -30,7 +30,7 @@ import (
 const (
 	maxConcurrency = 5
 
-	xrdCRDName         = "compositeresourcedefinition.apiextensions.crossplane.io"
+	xrdCRDName         = "compositeresourcedefinitions.apiextensions.crossplane.io"
 	compositionCRDName = "compositions.apiextensions.crossplane.io"
 )
 
@@ -52,7 +52,7 @@ func SetupXRDSync(mgr ctrl.Manager, localClient client.Client, log logging.Logge
 	ni := func() rresource.Object { return &v1alpha1.CompositeResourceDefinition{} }
 	ca := rresource.ClientApplicator{
 		Client:     localClient,
-		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+		Applicator: rresource.NewAPIPatchingApplicator(localClient),
 	}
 
 	r := NewReconciler(mgr,
@@ -88,7 +88,7 @@ func SetupCompositionSync(mgr ctrl.Manager, localClient client.Client, log loggi
 	ni := func() rresource.Object { return &v1alpha1.Composition{} }
 	ca := rresource.ClientApplicator{
 		Client:     localClient,
-		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+		Applicator: rresource.NewAPIPatchingApplicator(localClient),
 	}
 
 	r := NewReconciler(mgr,

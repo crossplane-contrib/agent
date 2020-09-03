@@ -61,11 +61,10 @@ var (
 	}}
 )
 
-func TestSpecPropagator(t *testing.T) {
+func TestDefaultConfigurator(t *testing.T) {
 	type args struct {
 		local  *claim.Unstructured
 		remote *claim.Unstructured
-		kube   resource.ClientApplicator
 	}
 	type want struct {
 		err error
@@ -80,35 +79,13 @@ func TestSpecPropagator(t *testing.T) {
 			args: args{
 				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
 				remote: &claim.Unstructured{Unstructured: *remoteClaim.DeepCopy()},
-				kube: resource.ClientApplicator{
-					Client: &test.MockClient{},
-					Applicator: resource.ApplyFn(func(_ context.Context, object runtime.Object, _ ...resource.ApplyOption) error {
-						return nil
-					}),
-				},
-			},
-		},
-		"ApplyFailed": {
-			reason: "Should return error if Apply fails",
-			args: args{
-				local:  &claim.Unstructured{Unstructured: *localClaim.DeepCopy()},
-				remote: claim.New(),
-				kube: resource.ClientApplicator{
-					Client: &test.MockClient{},
-					Applicator: resource.ApplyFn(func(_ context.Context, object runtime.Object, _ ...resource.ApplyOption) error {
-						return errBoom
-					}),
-				},
-			},
-			want: want{
-				err: errors.Wrap(errBoom, remotePrefix+errApplyRequirement),
 			},
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			p := NewSpecPropagator(tc.args.kube)
-			err := p.Propagate(context.Background(), tc.args.local, tc.args.remote)
+			p := NewDefaultConfigurator()
+			err := p.Configure(context.Background(), tc.args.local, tc.args.remote)
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\nReason: %s\np.Propagate(...): -want error, +got error:\n%s", tc.reason, diff)
@@ -159,7 +136,7 @@ func TestLateInitializer(t *testing.T) {
 				},
 			},
 			want: want{
-				err: errors.Wrap(errBoom, localPrefix+errUpdateRequirement),
+				err: errors.Wrap(errBoom, localPrefix+errUpdateClaim),
 			},
 		},
 	}

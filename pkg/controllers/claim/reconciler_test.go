@@ -174,7 +174,7 @@ func TestReconcile(t *testing.T) {
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
 							want := claim.New(claim.WithGroupVersionKind(gvk))
 							want.SetDeletionTimestamp(&now)
-							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, remotePrefix+errDeleteRequirement)))
+							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, remotePrefix+errDeleteClaim)))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
 								reason := "The error should be returned if deletion call fails"
 								t.Errorf("\nReason: %s\n-want, +got:\n%s", reason, diff)
@@ -264,7 +264,7 @@ func TestReconcile(t *testing.T) {
 						MockGet: test.NewMockGetFn(nil),
 						MockStatusUpdate: func(_ context.Context, obj runtime.Object, _ ...client.UpdateOption) error {
 							want := claim.New(claim.WithGroupVersionKind(gvk))
-							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, errPropagate)))
+							want.SetConditions(resource.AgentSyncError(errors.Wrap(errBoom, errPush)))
 							if diff := cmp.Diff(want.GetUnstructured(), obj, test.EquateConditions()); diff != "" {
 								reason := "An error should be returned if propagator fails"
 								t.Errorf("\nReason: %s\n-want, +got:\n%s", reason, diff)
