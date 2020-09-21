@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package publication
+package xrd
 
 import (
 	"fmt"
@@ -24,19 +24,15 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
-	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
 )
 
-// CRDNameOf returns the name of the CRD that's created as result of given InfrastructurePublication.
-func CRDNameOf(ip v1alpha1.InfrastructurePublication) types.NamespacedName {
-	gk := schema.ParseGroupKind(ip.Spec.InfrastructureDefinitionReference.Name)
-	if len(gk.Kind) == 0 || len(gk.Group) == 0 {
+// GetClaimCRDName returns the name of the claim CRD that's created as result of
+// given CompositeResourceDefinition.
+func GetClaimCRDName(xrd v1alpha1.CompositeResourceDefinition) types.NamespacedName {
+	if xrd.Spec.ClaimNames == nil {
 		return types.NamespacedName{}
 	}
-	// TODO(muvaf): This isn't a guaranteed way to remove the plurality addition
-	// from the Kind since there could be cases where it's not just a suffix of `s`.
-	// But we'll remote IP anyway, so, it's good for now.
-	return types.NamespacedName{Name: fmt.Sprintf("%s%s.%s", gk.Kind[:len(gk.Kind)-1], ccrd.PublishedInfrastructureSuffixPlural, gk.Group)}
+	return types.NamespacedName{Name: fmt.Sprintf("%s.%s", xrd.Spec.ClaimNames.Plural, xrd.Spec.CRDSpecTemplate.Group)}
 }
 
 // GroupVersionKindOf returns the served GroupVersionKind of given CRD.

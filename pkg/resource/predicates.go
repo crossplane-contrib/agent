@@ -17,61 +17,33 @@ limitations under the License.
 package resource
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 )
 
 // NewNameFilter returns a new *NameFilter that uses the given list.
-func NewNameFilter(list []types.NamespacedName) *NameFilter {
-	return &NameFilter{list: list}
+func NewNameFilter(list []types.NamespacedName) predicate.Funcs {
+	return predicate.NewPredicateFuncs(func(meta metav1.Object, _ runtime.Object) bool {
+		for _, nn := range list {
+			if meta.GetName() == nn.Name && meta.GetNamespace() == nn.Namespace {
+				return true
+			}
+		}
+		return false
+	})
 }
 
-// NameFilter allows only the objects whose name appears in the list. This applies
-// to all kinds of events that a controller can receive.
-type NameFilter struct {
-	list []types.NamespacedName
-}
-
-// Create returns true if the NamespacedName of the object of the event is allowed
-// to be reconciled.
-func (f *NameFilter) Create(e event.CreateEvent) bool {
-	for _, nn := range f.list {
-		if e.Meta.GetName() == nn.Name && e.Meta.GetNamespace() == nn.Namespace {
+// NewXRDWithClaim returns a new XRDWithClaim object.
+func NewXRDWithClaim() predicate.Funcs {
+	return predicate.NewPredicateFuncs(func(_ metav1.Object, object runtime.Object) bool {
+		xrd, ok := object.(*v1alpha1.CompositeResourceDefinition)
+		if !ok {
 			return true
 		}
-	}
-	return false
-}
-
-// Update returns true if the NamespacedName of the object of the event is allowed
-// to be reconciled.
-func (f *NameFilter) Update(e event.UpdateEvent) bool {
-	for _, nn := range f.list {
-		if e.MetaNew.GetName() == nn.Name && e.MetaNew.GetNamespace() == nn.Namespace {
-			return true
-		}
-	}
-	return false
-}
-
-// Delete returns true if the NamespacedName of the object of the event is allowed
-// to be reconciled.
-func (f *NameFilter) Delete(e event.DeleteEvent) bool {
-	for _, nn := range f.list {
-		if e.Meta.GetName() == nn.Name && e.Meta.GetNamespace() == nn.Namespace {
-			return true
-		}
-	}
-	return false
-}
-
-// Generic returns true if the NamespacedName of the object of the event is allowed
-// to be reconciled.
-func (f *NameFilter) Generic(e event.GenericEvent) bool {
-	for _, nn := range f.list {
-		if e.Meta.GetName() == nn.Name && e.Meta.GetNamespace() == nn.Namespace {
-			return true
-		}
-	}
-	return false
+		return xrd.Spec.ClaimNames != nil
+	})
 }

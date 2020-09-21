@@ -53,7 +53,7 @@ func main() {
 	}
 	defaultConfig, err := clientcmd.BuildConfigFromFlags("", *dsa)
 	if err != nil {
-		kingpin.FatalUsage("could not parse default kubeconfig %s", *csa)
+		kingpin.FatalUsage("could not parse default kubeconfig %s", *dsa)
 	}
 	clusterConfig, err := clientcmd.BuildConfigFromFlags("", *csa)
 	if err != nil {
@@ -70,7 +70,6 @@ func main() {
 	case "remote":
 		agent := &remote.Agent{
 			ClusterConfig: clusterConfig,
-			DefaultConfig: defaultConfig,
 		}
 		kingpin.FatalIfError(agent.Run(logging.NewLogrLogger(zl.WithName("crossplane-agent")), duration), "cannot run agent in remote mode")
 	}

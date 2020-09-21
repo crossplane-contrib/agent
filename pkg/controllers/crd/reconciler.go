@@ -31,7 +31,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 
 	"github.com/crossplane/agent/pkg/resource"
 )
@@ -63,9 +63,9 @@ const (
 // cluster and replicates them in the local cluster.
 func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger) error {
 	name := "CustomResourceDefinitions"
-	ca := rresource.ClientApplicator{
+	ca := runtimeresource.ClientApplicator{
 		Client:     localClient,
-		Applicator: rresource.NewAPIUpdatingApplicator(localClient),
+		Applicator: runtimeresource.NewAPIUpdatingApplicator(localClient),
 	}
 	r := NewReconciler(mgr, ca, logger)
 	return ctrl.NewControllerManagedBy(mgr).
@@ -73,15 +73,14 @@ func Setup(mgr manager.Manager, localClient client.Client, logger logging.Logger
 		For(&v1beta1.CustomResourceDefinition{}).
 		WithOptions(kcontroller.Options{MaxConcurrentReconciles: maxConcurrency}).
 		WithEventFilter(resource.NewNameFilter([]types.NamespacedName{
-			{Name: "infrastructuredefinitions.apiextensions.crossplane.io"},
-			{Name: "infrastructurepublications.apiextensions.crossplane.io"},
+			{Name: "compositeresourcedefinitions.apiextensions.crossplane.io"},
 			{Name: "compositions.apiextensions.crossplane.io"},
 		})).
 		Complete(r)
 }
 
 // NewReconciler returns a new *Reconciler.
-func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientApplicator, logger logging.Logger) *Reconciler {
+func NewReconciler(mgr manager.Manager, localClientApplicator runtimeresource.ClientApplicator, logger logging.Logger) *Reconciler {
 	return &Reconciler{
 		mgr:    mgr,
 		local:  localClientApplicator,
@@ -100,7 +99,7 @@ func NewReconciler(mgr manager.Manager, localClientApplicator rresource.ClientAp
 // an EventFilter to filter only the CRDs you'd like to be synced.
 type Reconciler struct {
 	mgr    ctrl.Manager
-	local  rresource.ClientApplicator
+	local  runtimeresource.ClientApplicator
 	remote client.Client
 
 	log    logging.Logger
@@ -115,11 +114,11 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	crd := &v1beta1.CustomResourceDefinition{}
-	if err := r.remote.Get(ctx, req.NamespacedName, crd); err != nil {
+	remoteCRD := &v1beta1.CustomResourceDefinition{}
+	if err := r.remote.Get(ctx, req.NamespacedName, remoteCRD); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remote+errGetCRD)
 	}
 	// TODO(muvaf): Set condition on local CRD to tell when is the last time
 	// it's been synced.
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, resource.SanitizedDeepCopyObject(crd)), local+errApplyCRD)
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Apply(ctx, resource.SanitizedDeepCopyObject(remoteCRD)), local+errApplyCRD)
 }

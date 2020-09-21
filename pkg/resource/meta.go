@@ -29,8 +29,8 @@ import (
 const (
 	TypeAgentSync v1alpha1.ConditionType = "AgentSynced"
 
-	ReasonAgentSyncSuccess v1alpha1.ConditionReason = "Agent successfully synced the resource"
-	ReasonAgentSyncError   v1alpha1.ConditionReason = "Agent encountered an error during sync"
+	ReasonAgentSyncSuccess v1alpha1.ConditionReason = "Success"
+	ReasonAgentSyncError   v1alpha1.ConditionReason = "Error"
 )
 
 // SanitizedDeepCopyObject removes the metadata that can be specific to a cluster.

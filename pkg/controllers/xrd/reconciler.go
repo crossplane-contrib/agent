@@ -14,12 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package publication
+package xrd
 
 import (
 	"context"
-
 	"time"
+
+	"github.com/crossplane/agent/pkg/resource"
 
 	"github.com/pkg/errors"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
@@ -38,12 +39,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/meta"
-	rresource "github.com/crossplane/crossplane-runtime/pkg/resource"
+	runtimeresource "github.com/crossplane/crossplane-runtime/pkg/resource"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1"
 	"github.com/crossplane/crossplane/apis/apiextensions/v1alpha1/ccrd"
-	crequirement "github.com/crossplane/crossplane/pkg/controller/apiextensions/requirement"
+	coreclaim "github.com/crossplane/crossplane/pkg/controller/apiextensions/claim"
 
-	"github.com/crossplane/agent/pkg/controllers/requirement"
+	"github.com/crossplane/agent/pkg/controllers/claim"
 )
 
 const (
@@ -52,34 +53,36 @@ const (
 	shortWait = 30 * time.Second
 	tinyWait  = 3 * time.Second
 
-	finalizer = "agent.crossplane.io/requirement-crd-controller"
+	finalizer = "agent.crossplane.io/claim-crd-controller"
 
 	localPrefix        = "local cluster: "
 	remotePrefix       = "remote cluster: "
-	errUpdateStatus    = "cannot update status of infrastructure publication"
+	errUpdateStatus    = "cannot update status of xrd"
 	errStartController = "cannot start controller"
 	errRemoveFinalizer = "cannot remove finalizer"
-	errGetPublication  = "cannot get infrastructure publication"
-	errRenderCRD       = "cannot render a crd from remote infrastructurepublication"
-	errGetCRD          = "cannot get custom resoruce definition"
+	errGetXRD          = "cannot get xrd"
+	errFetchCRD        = "cannot fetch the crd of xrd from remote"
+	errGetCRD          = "cannot get custom resource definition"
 	errApplyCRD        = "cannot apply custom resource definition"
-	errListCR          = "cannot list custom resources of published type"
-	errDeleteCR        = "cannot delete custom resources of published type"
-	errDeleteCRD       = "cannot delete crd of published type"
-	errAddFinalizerPub = "cannot add finalizer to infrastructurepublication"
+	errListCR          = "cannot list custom resources of claim type"
+	errDeleteCR        = "cannot delete custom resources of claim type"
+	errDeleteCRD       = "cannot delete crd of claim type"
+	errAddFinalizerXRD = "cannot add finalizer to xrd"
 )
 
-// Setup adds a controller that will reconcile InfrastructurePublications in the
-// local cluster and create CRDs & controllers that will reconcile those new types.
+// Setup adds a controller that will reconcile CompositeResourceDefinitions that
+// offer resource claim in the local cluster and create CRDs & controllers that
+// will reconcile those new types.
 func Setup(mgr manager.Manager, remoteClient client.Client, logger logging.Logger) error {
-	name := "RequirementCRD"
+	name := "ClaimCustomResourceDefinitions"
 	r := NewReconciler(mgr, remoteClient,
-		WithCRDRenderer(NewAPIRemoteCRDRenderer(remoteClient)),
+		WithCRDFetcher(NewAPIRemoteCRDFetcher(remoteClient)),
 		WithLogger(logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))))
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
-		For(&v1alpha1.InfrastructurePublication{}).
+		For(&v1alpha1.CompositeResourceDefinition{}).
+		WithEventFilter(resource.NewXRDWithClaim()).
 		Owns(&v1beta1.CustomResourceDefinition{}).
 		Complete(r)
 }
@@ -92,14 +95,14 @@ func WithControllerEngine(c ControllerEngine) ReconcilerOption {
 }
 
 // WithFinalizer specifies how the Reconciler should add and remove finalizers.
-func WithFinalizer(f rresource.Finalizer) ReconcilerOption {
+func WithFinalizer(f runtimeresource.Finalizer) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.finalizer = f
 	}
 }
 
-// WithCRDRenderer specifies how the Reconciler should render CRDs.
-func WithCRDRenderer(re CRDRenderer) ReconcilerOption {
+// WithCRDFetcher specifies how the Reconciler should fetch CRDs of claims.
+func WithCRDFetcher(re CRDFetcher) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.crd = re
 	}
@@ -107,7 +110,7 @@ func WithCRDRenderer(re CRDRenderer) ReconcilerOption {
 
 // WithLocalApplicator specifies what Applicator in local cluster Reconciler
 // should use.
-func WithLocalApplicator(a rresource.Applicator) ReconcilerOption {
+func WithLocalApplicator(a runtimeresource.Applicator) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.local.Applicator = a
 	}
@@ -134,14 +137,14 @@ type ReconcilerOption func(*Reconciler)
 func NewReconciler(mgr manager.Manager, remoteClient client.Client, opts ...ReconcilerOption) *Reconciler {
 	r := &Reconciler{
 		mgr: mgr,
-		local: rresource.ClientApplicator{
+		local: runtimeresource.ClientApplicator{
 			Client:     mgr.GetClient(),
-			Applicator: rresource.NewAPIUpdatingApplicator(mgr.GetClient()),
+			Applicator: runtimeresource.NewAPIUpdatingApplicator(mgr.GetClient()),
 		},
 		remote:    remoteClient,
 		engine:    controller.NewEngine(mgr),
-		crd:       NewNopRenderer(),
-		finalizer: rresource.NewAPIFinalizer(mgr.GetClient(), finalizer),
+		crd:       NewNopFetcher(),
+		finalizer: runtimeresource.NewAPIFinalizer(mgr.GetClient(), finalizer),
 		log:       logging.NewNopLogger(),
 		record:    event.NewNopRecorder(),
 	}
@@ -157,33 +160,33 @@ type ControllerEngine interface {
 	Stop(name string)
 }
 
-// CRDRenderer can be satisfied with objects that can return a CRD with InfrastructurePublication
-// information.
-type CRDRenderer interface {
-	Render(ctx context.Context, ip v1alpha1.InfrastructurePublication) (*v1beta1.CustomResourceDefinition, error)
+// CRDFetcher can be satisfied with objects that can return a CRD with
+// CompositeResourceDefinition information.
+type CRDFetcher interface {
+	Fetch(ctx context.Context, ip v1alpha1.CompositeResourceDefinition) (*v1beta1.CustomResourceDefinition, error)
 }
 
-// Reconciler watches the InfrastructurePublications in the cluster and creates a
-// CRD for each of them with spec that is rendered via supplied CRDRenderer. Then
-// it creates a controller for each new type that will sync the instances of that
-// type from local cluster to remote cluster.
+// Reconciler watches the CompositeResourceDefinition with resource claim offerings
+// in the cluster and creates a CRD for each of them with spec that is fetched
+// via supplied CRDFetcher. Then it creates a controller for each new type that
+// will sync the instances of that type from local cluster to remote cluster.
 type Reconciler struct {
 	mgr    ctrl.Manager
-	local  rresource.ClientApplicator
+	local  runtimeresource.ClientApplicator
 	remote client.Client
 
-	crd       CRDRenderer
+	crd       CRDFetcher
 	engine    ControllerEngine
-	finalizer rresource.Finalizer
+	finalizer runtimeresource.Finalizer
 
 	log    logging.Logger
 	record event.Recorder
 }
 
-// TODO(muvaf): Set error conditions on the InfrastructurePublication.
+// TODO(muvaf): Set error conditions on the CompositeResourceDefinition.
 
-// Reconcile reconciles InfrastructurePublication and does the necessary operations
-// to bootstrap reconciliation of that new type defined by InfrastructurePublication.
+// Reconcile reconciles CompositeResourceDefinition and does the necessary operations
+// to bootstrap reconciliation of that new type defined by CompositeResourceDefinition.
 func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) { // nolint:gocyclo
 	log := r.log.WithValues("request", req)
 	log.Debug("Reconciling")
@@ -191,20 +194,24 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	p := &v1alpha1.InfrastructurePublication{}
-	if err := r.local.Get(ctx, req.NamespacedName, p); rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetPublication)
-	}
-	local, err := r.crd.Render(ctx, *p)
-	if rresource.IgnoreNotFound(err) != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errRenderCRD)
+	xrd := &v1alpha1.CompositeResourceDefinition{}
+	if err := r.local.Get(ctx, req.NamespacedName, xrd); runtimeresource.IgnoreNotFound(err) != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetXRD)
 	}
 
-	if meta.WasDeleted(p) {
-		p.Status.SetConditions(v1alpha1.Deleting())
+	// We will fetch the CRD of the claim that CompositeResourceDefinition offers
+	// and apply it in the local cluster so that we can start the sync controller
+	// targeting that type.
+	localCRD, err := r.crd.Fetch(ctx, *xrd)
+	if runtimeresource.IgnoreNotFound(err) != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, remotePrefix+errFetchCRD)
+	}
 
-		err := r.local.Get(ctx, CRDNameOf(*p), local)
-		if rresource.IgnoreNotFound(err) != nil {
+	// In case XRD is deleted, we need to clean up the CRD and stop its controller.
+	if meta.WasDeleted(xrd) {
+		xrd.Status.SetConditions(v1alpha1.Deleting())
+		err := r.local.Get(ctx, GetClaimCRDName(*xrd), localCRD)
+		if runtimeresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errGetCRD)
 		}
 
@@ -214,13 +221,13 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// creating it, or that we lost control of it around the same time we
 		// were deleted. In the (presumably exceedingly rare) latter case we'll
 		// orphan the CRD.
-		if !meta.WasCreated(local) || !metav1.IsControlledBy(local, p) {
+		if !meta.WasCreated(localCRD) || !metav1.IsControlledBy(localCRD, xrd) {
 			// It's likely that we've already stopped this controller on a
 			// previous reconcile, but we try again just in case. This is a
 			// no-op if the controller was already stopped.
-			r.engine.Stop(crequirement.ControllerName(p.GetName()))
+			r.engine.Stop(coreclaim.ControllerName(xrd.GetName()))
 
-			if err := r.finalizer.RemoveFinalizer(ctx, p); err != nil {
+			if err := r.finalizer.RemoveFinalizer(ctx, xrd); err != nil {
 				return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errRemoveFinalizer)
 			}
 
@@ -230,8 +237,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		}
 
 		l := &kunstructured.UnstructuredList{}
-		l.SetGroupVersionKind(GroupVersionKindOf(*local))
-		if err := r.local.List(ctx, l); rresource.Ignore(kmeta.IsNoMatchError, err) != nil {
+		l.SetGroupVersionKind(GroupVersionKindOf(*localCRD))
+		if err := r.local.List(ctx, l); runtimeresource.Ignore(kmeta.IsNoMatchError, err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errListCR)
 		}
 
@@ -239,11 +246,8 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 		// the controller we started to reconcile them. This ensures the
 		// controller has a chance to execute its cleanup logic, if any.
 		if len(l.Items) > 0 {
-			// TODO(negz): DeleteAllOf does not work here, despite working in
-			// the definition controller. Could this be due to requirements
-			// being namespaced rather than cluster scoped?
 			for i := range l.Items {
-				if err := r.local.Delete(ctx, &l.Items[i]); rresource.IgnoreNotFound(err) != nil {
+				if err := r.local.Delete(ctx, &l.Items[i]); runtimeresource.IgnoreNotFound(err) != nil {
 					return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCR)
 				}
 			}
@@ -251,53 +255,71 @@ func (r *Reconciler) Reconcile(req reconcile.Request) (reconcile.Result, error) 
 			// We requeue to confirm that all the custom resources we just
 			// deleted are actually gone. We need to requeue after a tiny wait
 			// because we won't be requeued implicitly when the CRs are deleted.
-			return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
+			return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 		}
 
 		// The controller should be stopped before the deletion of CRD so that
 		// it doesn't crash.
-		r.engine.Stop(crequirement.ControllerName(p.GetName()))
+		r.engine.Stop(coreclaim.ControllerName(xrd.GetName()))
 
-		if err := r.local.Delete(ctx, local); rresource.IgnoreNotFound(err) != nil {
+		if err := r.local.Delete(ctx, localCRD); runtimeresource.IgnoreNotFound(err) != nil {
 			return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errDeleteCRD)
 		}
 
 		// We should be requeued implicitly because we're watching the
 		// CustomResourceDefinition that we just deleted, but we requeue after
 		// a tiny wait just in case the CRD isn't gone after the first requeue.
-		p.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
-		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
+		xrd.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 	}
 
-	if err := r.finalizer.AddFinalizer(ctx, p); err != nil {
-		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizerPub)
+	// After this point, we'll start operations that will need some cleanup
+	// if XRD is deleted such as CRD creation and controller initialization. So,
+	// we add a finalizer to make sure this Reconciler gets the chance to do
+	// the cleanup before the XRD disappears from the api-server.
+	if err := r.finalizer.AddFinalizer(ctx, xrd); err != nil {
+		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errAddFinalizerXRD)
 	}
 
-	meta.AddOwnerReference(local, meta.AsController(meta.ReferenceTo(p, v1alpha1.InfrastructurePublicationGroupVersionKind)))
-	if err := r.local.Apply(ctx, local, rresource.MustBeControllableBy(p.GetUID())); err != nil {
+	// We'll create or update the CRD of the claim type in local cluster to make
+	// it available to users.
+	meta.AddOwnerReference(localCRD, meta.AsController(meta.ReferenceTo(xrd, v1alpha1.CompositeResourceDefinitionGroupVersionKind)))
+	if err := r.local.Apply(ctx, localCRD, runtimeresource.MustBeControllableBy(xrd.GetUID())); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errApplyCRD)
 	}
 
-	if !ccrd.IsEstablished(local.Status) {
-		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
+	// It takes a little while for Kubernetes API Server to establish the new API
+	// endpoints for the CRD. We'd like to make sure it's ready before starting
+	// its controller.
+	if !ccrd.IsEstablished(localCRD.Status) {
+		return reconcile.Result{RequeueAfter: tinyWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 	}
-	o := kcontroller.Options{Reconciler: requirement.NewReconciler(r.mgr,
+
+	// The new controller for the type is configured with a reconciler and other
+	// parameters that the reconciler requires.
+	o := kcontroller.Options{Reconciler: claim.NewReconciler(r.mgr,
 		r.remote,
-		GroupVersionKindOf(*local),
-		requirement.WithLogger(log.WithValues("controller", crequirement.ControllerName(p.GetName()))),
-		requirement.WithRecorder(r.record.WithAnnotations("controller", crequirement.ControllerName(p.GetName()))),
+		GroupVersionKindOf(*localCRD),
+		claim.WithLogger(log.WithValues("controller", coreclaim.ControllerName(xrd.GetName()))),
+		claim.WithRecorder(r.record.WithAnnotations("controller", coreclaim.ControllerName(xrd.GetName()))),
 	)}
 
+	// Since we don't have strongly typed structs for the claims, we set the GVK
+	// of Unstructured object so that controller-runtime is able to get events
+	// of them via its unstructured client.
 	rq := &kunstructured.Unstructured{}
-	rq.SetGroupVersionKind(GroupVersionKindOf(*local))
+	rq.SetGroupVersionKind(GroupVersionKindOf(*localCRD))
 
-	if err := r.engine.Start(crequirement.ControllerName(p.GetName()), o,
+	// We're all set for starting the controller. This assumes that ControllerEngine
+	// Start call is idempotent, hence we don't check whether it was already started
+	// or not.
+	if err := r.engine.Start(coreclaim.ControllerName(xrd.GetName()), o,
 		controller.For(rq, &handler.EnqueueRequestForObject{}),
 	); err != nil {
 		return reconcile.Result{RequeueAfter: shortWait}, errors.Wrap(err, localPrefix+errStartController)
 	}
 
-	p.Status.SetConditions(v1alpha1.Started())
-	p.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
-	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, p), localPrefix+errUpdateStatus)
+	// The reconciliation is completed successfully.
+	xrd.Status.SetConditions(runtimev1alpha1.ReconcileSuccess())
+	return reconcile.Result{RequeueAfter: longWait}, errors.Wrap(r.local.Status().Update(ctx, xrd), localPrefix+errUpdateStatus)
 }

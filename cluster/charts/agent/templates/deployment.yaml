@@ -21,6 +21,8 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           command:
             - agent
+          ports:
+            - containerPort: 8080
           args:
             - "--mode"
             - "local"
@@ -42,6 +44,8 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           command:
             - agent
+          ports:
+            - containerPort: 8081
           args:
             - "--mode"
             - "remote"
