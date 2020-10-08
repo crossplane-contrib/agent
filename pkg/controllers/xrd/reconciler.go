@@ -57,17 +57,17 @@ const (
 
 	localPrefix        = "local cluster: "
 	remotePrefix       = "remote cluster: "
-	errUpdateStatus    = "cannot update status of xrd"
+	errUpdateStatus    = "cannot update status of composite resource definition"
 	errStartController = "cannot start controller"
 	errRemoveFinalizer = "cannot remove finalizer"
-	errGetXRD          = "cannot get xrd"
-	errFetchCRD        = "cannot fetch the crd of xrd from remote"
+	errGetXRD          = "cannot get composite resource definition"
+	errFetchCRD        = "cannot fetch the crd of composite resource definition from remote"
 	errGetCRD          = "cannot get custom resource definition"
 	errApplyCRD        = "cannot apply custom resource definition"
 	errListCR          = "cannot list custom resources of claim type"
 	errDeleteCR        = "cannot delete custom resources of claim type"
 	errDeleteCRD       = "cannot delete crd of claim type"
-	errAddFinalizerXRD = "cannot add finalizer to xrd"
+	errAddFinalizerXRD = "cannot add finalizer to composite resource definition"
 )
 
 // Setup adds a controller that will reconcile CompositeResourceDefinitions that
